@@ -49,3 +49,9 @@ app.*.map.json
 
 # FVM Version Cache
 .fvm/
+# Local environment config (secrets). Copy config/example.json to config/local.json.
+config/*.json
+!config/example.json
+
+# Obfuscation symbols from release builds
+/debug-info/
