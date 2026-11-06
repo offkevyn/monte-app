@@ -84,18 +84,40 @@ final class UnauthorizedFailure extends Failure {
   String toString() => 'UnauthorizedFailure()';
 }
 
-/// Login rejected: wrong document or password.
+/// Login rejected: wrong document or password. The server does not say
+/// which one, so nobody can find out whether a CPF has an account.
 final class InvalidCredentialsFailure extends Failure {
-  const InvalidCredentialsFailure();
+  const InvalidCredentialsFailure({this.attemptsLeft});
+
+  /// Tries left before the temporary lock, when the server tells.
+  final int? attemptsLeft;
 
   @override
-  bool operator ==(Object other) => other is InvalidCredentialsFailure;
+  bool operator ==(Object other) =>
+      other is InvalidCredentialsFailure && other.attemptsLeft == attemptsLeft;
 
   @override
-  int get hashCode => (InvalidCredentialsFailure).hashCode;
+  int get hashCode => Object.hash(InvalidCredentialsFailure, attemptsLeft);
 
   @override
-  String toString() => 'InvalidCredentialsFailure()';
+  String toString() => 'InvalidCredentialsFailure(attemptsLeft: $attemptsLeft)';
+}
+
+/// Too many wrong passwords: login is blocked for a while (HTTP 423).
+final class AccountLockedFailure extends Failure {
+  const AccountLockedFailure({this.retryAfter});
+
+  final Duration? retryAfter;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AccountLockedFailure && other.retryAfter == retryAfter;
+
+  @override
+  int get hashCode => Object.hash(AccountLockedFailure, retryAfter);
+
+  @override
+  String toString() => 'AccountLockedFailure(retryAfter: $retryAfter)';
 }
 
 /// The requested item does not exist (HTTP 404).

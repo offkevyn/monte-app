@@ -7,7 +7,6 @@ void main() {
       NoConnectionFailure(),
       TimeoutFailure(),
       UnauthorizedFailure(),
-      InvalidCredentialsFailure(),
       NotFoundFailure(),
       CancelledFailure(),
     ];
@@ -47,6 +46,17 @@ void main() {
     expect(
       const StorageFailure('x').hashCode,
       const StorageFailure('x').hashCode,
+    );
+  });
+
+  test('login failures compare their details', () {
+    expect(
+      const InvalidCredentialsFailure(attemptsLeft: 2),
+      isNot(const InvalidCredentialsFailure(attemptsLeft: 1)),
+    );
+    expect(
+      const AccountLockedFailure(retryAfter: Duration(minutes: 5)).toString(),
+      contains('0:05:00'),
     );
   });
 
