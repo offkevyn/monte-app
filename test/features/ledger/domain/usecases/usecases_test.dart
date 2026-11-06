@@ -53,7 +53,7 @@ void main() {
   late FakeLedgerRepository repository;
   final freshness = DataFreshness(
     syncedAt: DateTime.utc(2026, 11, 5, 12),
-    isStale: true,
+    syncFailure: const NoConnectionFailure(),
   );
 
   setUp(() => repository = FakeLedgerRepository());

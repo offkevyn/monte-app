@@ -19,12 +19,20 @@ dependencies:
   intl: ^0.20.3
   meta: ^1.19.0
   dio: ^5.11.1
+  drift: ^2.35.3
+  drift_flutter: ^0.3.1
+  sqlite3: ^3.9.0
+  flutter_secure_storage: ^11.2.0
+  path_provider: ^2.1.6
+  path: ^1.9.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  drift_dev: ^2.35.2
+  build_runner: ^2.17.1
 
 flutter:
   uses-material-design: true
@@ -44,3 +52,10 @@ flutter:
           weight: 700
         - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
           weight: 800
+
+# Bundle SQLite3MultipleCiphers instead of plain SQLite, so the local
+# database is encrypted at rest (key kept in the platform keystore).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
