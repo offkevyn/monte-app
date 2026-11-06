@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 /// A calendar day as the user sees it (no time, no time zone).
 ///
@@ -33,6 +33,13 @@ final class LocalDate implements Comparable<LocalDate> {
 
   LocalDate addDays(int days) =>
       LocalDate._fromUtcFields(DateTime.utc(year, month, day + days));
+
+  /// Whole days from this date to [other]; negative when [other] is earlier.
+  /// Exact because UTC days always have 24 hours.
+  int daysUntil(LocalDate other) =>
+      other._utcMidnight.difference(_utcMidnight).inDays;
+
+  DateTime get _utcMidnight => DateTime.utc(year, month, day);
 
   LocalDate get firstDayOfMonth => LocalDate._(year, month, 1);
 
