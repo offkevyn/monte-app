@@ -75,6 +75,12 @@ final class LedgerLocalDataSource {
         );
   });
 
+  /// Removes every transaction and the sync state.
+  Future<void> clear() => _db.transaction(() async {
+    await _db.delete(_db.transactions).go();
+    await _db.delete(_db.syncState).go();
+  });
+
   /// Every transaction, newest first.
   Future<List<Transaction>> all() async {
     final rows = await (_db.select(
