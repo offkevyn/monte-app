@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 /// An amount of Brazilian reais stored as an integer number of cents.
 ///

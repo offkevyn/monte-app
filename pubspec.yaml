@@ -17,6 +17,7 @@ dependencies:
   # Pinned: 7.x is a full rewrite with a different API (see docs/adr).
   flutter_modular: 6.4.1
   intl: ^0.20.3
+  meta: ^1.19.0
 
 dev_dependencies:
   flutter_test:
