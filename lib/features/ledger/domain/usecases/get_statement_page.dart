@@ -1,5 +1,5 @@
+import '../../../../core/freshness/data_freshness.dart';
 import '../../../../core/result/result.dart';
-import '../entities/ledger_snapshot.dart';
 import '../entities/transaction_filter.dart';
 import '../entities/transaction_page.dart';
 import '../repositories/ledger_repository.dart';

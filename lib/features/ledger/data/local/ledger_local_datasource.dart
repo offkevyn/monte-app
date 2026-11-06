@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../../../core/money/money.dart';
+import '../../../../core/text/search_text.dart';
 import '../../../../core/time/local_calendar.dart';
 import '../../domain/entities/transaction.dart';
 import '../../domain/entities/transaction_filter.dart';
 import '../../domain/entities/transaction_page.dart';
-import '../../domain/services/search_text.dart';
 import '../dtos/transaction_dto.dart';
 import '../mappers/transaction_mapper.dart';
 import 'ledger_database.dart';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monte/core/failures/failure.dart';
+import 'package:monte/core/freshness/data_freshness.dart';
 import 'package:monte/core/money/money.dart';
 import 'package:monte/core/money/money_formatter.dart';
 import 'package:monte/core/result/result.dart';

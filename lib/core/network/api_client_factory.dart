@@ -17,6 +17,7 @@ abstract final class ApiClientFactory {
     HttpClientAdapter? adapter,
     RetryPolicy retryPolicy = const RetryPolicy(),
     Map<String, String> headers = const {},
+    List<Interceptor> interceptors = const [],
     Sleep? sleep,
   }) {
     final dio = Dio(
@@ -28,9 +29,11 @@ abstract final class ApiClientFactory {
       ),
     );
     if (adapter != null) dio.httpClientAdapter = adapter;
-    dio.interceptors.add(
-      RetryInterceptor(dio, policy: retryPolicy, sleep: sleep),
-    );
+    // Extra interceptors run before the retry, so a retried request goes
+    // through them again.
+    dio.interceptors
+      ..addAll(interceptors)
+      ..add(RetryInterceptor(dio, policy: retryPolicy, sleep: sleep));
     return dio;
   }
 }

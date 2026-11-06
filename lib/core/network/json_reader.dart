@@ -30,6 +30,27 @@ extension type const JsonReader(Map<String, Object?> json) {
     throw FormatException('Field "$key" must be an integer');
   }
 
+  int? optionalInteger(String key) {
+    final value = json[key];
+    if (value == null || value is int) return value as int?;
+    throw FormatException('Field "$key" must be an integer');
+  }
+
+  /// Any JSON number. Meant for values with fractions (a crypto price) that
+  /// are converted right away to an exact scaled integer, never kept as a
+  /// double.
+  num number(String key) {
+    final value = json[key];
+    if (value is num) return value;
+    throw FormatException('Field "$key" must be a number');
+  }
+
+  num? optionalNumber(String key) {
+    final value = json[key];
+    if (value == null || value is num) return value as num?;
+    throw FormatException('Field "$key" must be a number');
+  }
+
   List<Object?> list(String key) {
     final value = json[key];
     if (value is List) return value;

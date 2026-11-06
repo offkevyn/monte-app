@@ -13,13 +13,14 @@ import '../../../core/theme/theme_controller.dart';
 import '../../../core/time/date_labels.dart';
 import '../../../core/ui/failure_message.dart';
 import '../../../core/ui/skeleton.dart';
+import '../../../core/ui/stale_banner.dart';
 import '../../../core/ui/under_construction.dart';
 import '../../auth/presentation/current_session.dart';
+import '../../crypto/presentation/highlights/crypto_highlights_card.dart';
 import '../../ledger/domain/entities/date_span.dart';
 import '../../ledger/domain/usecases/get_dashboard.dart';
 import '../../ledger/presentation/ledger_labels.dart';
 import '../../ledger/presentation/widgets/sensitive_value.dart';
-import '../../ledger/presentation/widgets/stale_banner.dart';
 import '../../ledger/presentation/widgets/transaction_tile.dart';
 import 'dashboard_cubit.dart';
 import 'widgets/movement_chart.dart';
@@ -44,6 +45,7 @@ class DashboardPage extends StatelessWidget {
       theme: Modular.get<ThemeController>(),
       onOpenStatement: onOpenStatement,
       onOpenCrypto: onOpenCrypto,
+      cryptoCard: CryptoHighlightsCard(onOpenAll: onOpenCrypto),
     ),
   );
 }
@@ -59,7 +61,11 @@ class DashboardView extends StatelessWidget {
     required this.onOpenStatement,
     required this.onOpenCrypto,
     this.onOpenDetail = _openDetail,
+    this.cryptoCard,
   });
+
+  /// Crypto card at the end of the dashboard; tests can leave it out.
+  final Widget? cryptoCard;
 
   static void _openDetail(String id) =>
       Modular.to.pushNamed(Routes.statementDetail(id));
@@ -212,6 +218,7 @@ class DashboardView extends StatelessWidget {
                     ),
             ),
           ),
+          if (cryptoCard case final card?) SliverToBoxAdapter(child: card),
         ];
     }
   }

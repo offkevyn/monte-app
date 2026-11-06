@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monte/core/failures/failure.dart';
-import 'package:monte/features/ledger/domain/entities/ledger_snapshot.dart';
+import 'package:monte/core/freshness/data_freshness.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_page.dart';
 

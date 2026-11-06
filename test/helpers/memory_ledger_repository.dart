@@ -1,4 +1,5 @@
 import 'package:monte/core/failures/failure.dart';
+import 'package:monte/core/freshness/data_freshness.dart';
 import 'package:monte/core/money/money.dart';
 import 'package:monte/core/result/result.dart';
 import 'package:monte/core/time/local_calendar.dart';
