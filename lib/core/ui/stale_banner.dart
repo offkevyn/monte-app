@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/failures/failure.dart';
-import '../../../../core/theme/monte_theme.dart';
-import '../../../../core/time/date_labels.dart';
-import '../../domain/entities/ledger_snapshot.dart';
+import '../failures/failure.dart';
+import '../freshness/data_freshness.dart';
+import '../theme/monte_theme.dart';
+import '../time/date_labels.dart';
 
 /// Yellow strip: the numbers on screen are the local copy, and since when.
 class StaleBanner extends StatelessWidget {

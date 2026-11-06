@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:monte/core/text/search_text.dart';
 import 'package:monte/core/time/local_calendar.dart';
 import 'package:monte/core/time/local_date.dart';
 import 'package:monte/features/ledger/domain/entities/date_span.dart';
 import 'package:monte/features/ledger/domain/entities/transaction.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
-import 'package:monte/features/ledger/domain/services/search_text.dart';
 
 import '../../../../helpers/transactions.dart';
 

@@ -4,9 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:stream_transform/stream_transform.dart';
 
 import '../../../../core/failures/failure.dart';
+import '../../../../core/freshness/data_freshness.dart';
 import '../../../../core/result/result.dart';
 import '../../../../core/time/local_calendar.dart';
-import '../../../ledger/domain/entities/ledger_snapshot.dart';
 import '../../../ledger/domain/entities/transaction.dart';
 import '../../../ledger/domain/entities/transaction_filter.dart';
 import '../../../ledger/domain/entities/transaction_page.dart';

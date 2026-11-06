@@ -1,10 +1,10 @@
 import 'package:meta/meta.dart';
 
+import '../../../../core/freshness/data_freshness.dart';
 import '../../../../core/result/result.dart';
 import '../../../../core/time/clock.dart';
 import '../../../../core/time/local_calendar.dart';
 import '../entities/date_span.dart';
-import '../entities/ledger_snapshot.dart';
 import '../entities/transaction.dart';
 import '../repositories/ledger_repository.dart';
 import '../services/balance_calculator.dart';

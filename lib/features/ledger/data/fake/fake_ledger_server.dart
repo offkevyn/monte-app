@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import '../../../../core/network/fake/fake_http_adapter.dart';
 import '../../../../core/network/fake/fake_scenario.dart';
+import '../../../../core/text/search_text.dart';
 import '../../../../core/time/clock.dart';
 import '../../domain/entities/transaction.dart';
-import '../../domain/services/search_text.dart';
 import '../mappers/transaction_mapper.dart';
 import 'fake_ledger_generator.dart';
 

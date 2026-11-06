@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-import 'ledger_snapshot.dart';
+import '../../../../core/freshness/data_freshness.dart';
 import 'transaction.dart';
 import 'transaction_filter.dart';
 

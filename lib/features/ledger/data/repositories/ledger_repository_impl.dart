@@ -1,4 +1,5 @@
 import '../../../../core/failures/failure.dart';
+import '../../../../core/freshness/data_freshness.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/network/network_failures.dart';
 import '../../../../core/result/result.dart';

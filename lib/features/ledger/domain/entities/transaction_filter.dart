@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
+import '../../../../core/text/search_text.dart';
 import '../../../../core/time/local_calendar.dart';
-import '../services/search_text.dart';
 import 'date_span.dart';
 import 'transaction.dart';
 
