@@ -8,6 +8,7 @@ import 'package:monte/core/time/local_date.dart';
 import 'package:monte/features/ledger/domain/entities/date_span.dart';
 import 'package:monte/features/ledger/domain/entities/ledger_snapshot.dart';
 import 'package:monte/features/ledger/domain/entities/transaction.dart';
+import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_page.dart';
 import 'package:monte/features/ledger/domain/repositories/ledger_repository.dart';
 import 'package:monte/features/ledger/domain/usecases/get_dashboard.dart';
@@ -46,6 +47,15 @@ class FakeLedgerRepository implements LedgerRepository {
   Future<Result<Transaction>> getTransaction(String id) async {
     detailCalls.add(id);
     return detail!;
+  }
+
+  Result<int> count = const Ok(0);
+  final countCalls = <TransactionFilter>[];
+
+  @override
+  Future<Result<int>> countTransactions(TransactionFilter filter) async {
+    countCalls.add(filter);
+    return count;
   }
 
   @override
@@ -154,6 +164,13 @@ void main() {
       expect(result.valueOrNull, same(page));
       expect(repository.pageCalls, [query]);
     });
+  });
+
+  test('CountTransactions forwards the filter', () async {
+    repository.count = const Ok(23);
+    final filter = TransactionFilter(query: 'cafe');
+    expect(await CountTransactions(repository)(filter), const Ok(23));
+    expect(repository.countCalls, [filter]);
   });
 
   group('GetTransactionDetail', () {

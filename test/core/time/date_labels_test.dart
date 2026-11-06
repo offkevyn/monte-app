@@ -44,6 +44,20 @@ void main() {
     expect(labels.day(LocalDate(2025, 11, 2)), 'dom, 02 de nov de 2025');
   });
 
+  test('statement day headers', () {
+    expect(labels.dayHeader(LocalDate(2026, 11, 5)), 'Hoje · 5 de nov');
+    expect(labels.dayHeader(LocalDate(2026, 11, 4)), 'Ontem · 4 de nov');
+    expect(labels.dayHeader(LocalDate(2026, 11, 2)), 'Seg · 2 de nov');
+    expect(labels.dayHeader(LocalDate(2025, 11, 2)), 'Dom · 2 de nov de 2025');
+  });
+
+  test('full date and time in the user day', () {
+    expect(
+      labels.fullDateAndTime(DateTime.utc(2026, 11, 5, 1, 15)),
+      '04/11/2026 · 22:15',
+    );
+  });
+
   test('month names', () {
     expect(labels.month(LocalDate(2026, 3, 1)), 'Março');
     expect(labels.monthShort(LocalDate(2026, 3, 1)), 'mar');

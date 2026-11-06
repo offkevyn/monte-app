@@ -5,6 +5,7 @@ import '../../../../core/result/result.dart';
 import '../../../../core/time/clock.dart';
 import '../../domain/entities/ledger_snapshot.dart';
 import '../../domain/entities/transaction.dart';
+import '../../domain/entities/transaction_filter.dart';
 import '../../domain/entities/transaction_page.dart';
 import '../../domain/repositories/ledger_repository.dart';
 import '../datasources/ledger_remote_datasource.dart';
@@ -71,6 +72,13 @@ final class LedgerRepositoryImpl implements LedgerRepository {
         freshness: _freshness(state),
       );
     });
+  }
+
+  @override
+  Future<Result<int>> countTransactions(TransactionFilter filter) async {
+    final ready = await _ensureLocalData();
+    if (ready case Err(:final failure)) return Err(failure);
+    return _readLocal(() => _local.count(filter));
   }
 
   @override

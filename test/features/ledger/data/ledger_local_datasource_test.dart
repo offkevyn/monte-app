@@ -117,6 +117,20 @@ void main() {
     },
   );
 
+  test('count agrees with the pages for the same filter', () async {
+    for (final filter in [
+      TransactionFilter.none,
+      TransactionFilter(types: {TransactionType.income}),
+      TransactionFilter(query: 'padaria'),
+    ]) {
+      expect(
+        await local.count(filter),
+        (await readAll(filter)).length,
+        reason: '$filter',
+      );
+    }
+  });
+
   test('wildcards typed by the user are taken literally', () async {
     expect(await readAll(TransactionFilter(query: '%')), isEmpty);
     expect(await readAll(TransactionFilter(query: '_')), isEmpty);

@@ -177,6 +177,16 @@ void main() {
     expect(page.hasMore, isTrue);
   });
 
+  test('counts from the local copy', () async {
+    final count = await repository.countTransactions(
+      TransactionFilter(types: {TransactionType.income}),
+    );
+    expect(
+      count.valueOrNull,
+      server.data.transactions.where((t) => t.isIncome).length,
+    );
+  });
+
   test('a cursor from elsewhere becomes InvalidDataFailure', () async {
     final result = await repository.getTransactions(
       TransactionQuery(cursor: 'bm9wZQ=='),

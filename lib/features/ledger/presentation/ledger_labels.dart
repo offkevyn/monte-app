@@ -63,6 +63,17 @@ abstract final class LedgerLabels {
         PeriodPreset.last90Days => '90 dias',
       };
 
+  /// Chip of an active period: the preset name when it matches one,
+  /// otherwise the dates (`06/10 – 05/11`).
+  static String periodOf(DateSpan span, DateLabels dates) {
+    for (final preset in PeriodPreset.values) {
+      if (preset.resolve(dates.today) == span) {
+        return periodTitle(preset, dates);
+      }
+    }
+    return '${dates.shortDate(span.first)} – ${dates.shortDate(span.last)}';
+  }
+
   /// `Pix recebido · Ana Souza`: the counterparty is added when the
   /// description alone does not say who it was.
   static String title(Transaction transaction) {
