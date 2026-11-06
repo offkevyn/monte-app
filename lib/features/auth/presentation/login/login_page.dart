@@ -6,6 +6,9 @@ import 'package:flutter_modular/flutter_modular.dart'
     hide ModularWatchExtension;
 
 import '../../../../app/routes.dart';
+import '../../../../core/config/dev_tools.dart';
+import '../../../../core/dev/scenario_picker.dart';
+import '../../../../core/network/fake/fake_scenario.dart';
 import '../../../../core/theme/monte_theme.dart';
 import '../../../../core/ui/failure_message.dart';
 import '../../../../core/ui/monte_logo.dart';
@@ -23,17 +26,26 @@ class LoginPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => BlocProvider(
     create: (_) => Modular.get<LoginCubit>()..prefill(lastCpf),
-    child: const LoginView(),
+    child: LoginView(
+      onOpenDevTools: devToolsEnabled
+          ? (context) =>
+                showScenarioPicker(context, Modular.get<FakeBackendSettings>())
+          : null,
+    ),
   );
 }
 
 /// Public so widget tests can pump it with a cubit of their own.
 class LoginView extends StatefulWidget {
-  const LoginView({super.key, this.onSignedIn = _goHome});
+  const LoginView({super.key, this.onSignedIn = _goHome, this.onOpenDevTools});
 
   /// What happens after a successful login. The route lives here instead of
   /// inside the view logic, so the view can be tested without the router.
   final VoidCallback onSignedIn;
+
+  /// Long-pressing the logo opens the scenario picker; `null` (production
+  /// builds) leaves the logo as a plain image.
+  final void Function(BuildContext context)? onOpenDevTools;
 
   static void _goHome() => Modular.to.navigate(Routes.home);
 
@@ -102,9 +114,16 @@ class _LoginViewState extends State<LoginView> {
               builder: (context, state) => ListView(
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
                 children: [
-                  const Align(
+                  Align(
                     alignment: Alignment.centerLeft,
-                    child: MonteLogo(size: 52),
+                    child: GestureDetector(
+                      key: const Key('login.logo'),
+                      onLongPress: switch (widget.onOpenDevTools) {
+                        final open? => () => open(context),
+                        null => null,
+                      },
+                      child: const MonteLogo(size: 52),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
