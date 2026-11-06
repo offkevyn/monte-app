@@ -148,6 +148,21 @@ final class StorageFailure extends Failure {
   String toString() => 'StorageFailure($detail)';
 }
 
+/// The request was cancelled on purpose because a newer one replaced it
+/// (e.g. the user kept typing in the search). Never shown to the user.
+final class CancelledFailure extends Failure {
+  const CancelledFailure();
+
+  @override
+  bool operator ==(Object other) => other is CancelledFailure;
+
+  @override
+  int get hashCode => (CancelledFailure).hashCode;
+
+  @override
+  String toString() => 'CancelledFailure()';
+}
+
 /// Anything not anticipated. Kept so a bug becomes an error screen instead of
 /// a crash, while still carrying the original error for logging.
 final class UnexpectedFailure extends Failure {

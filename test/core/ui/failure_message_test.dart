@@ -14,6 +14,7 @@ void main() {
       const NotFoundFailure(),
       const InvalidDataFailure('amount missing'),
       const StorageFailure('db locked'),
+      const CancelledFailure(),
       UnexpectedFailure(StateError('boom')),
     ];
 

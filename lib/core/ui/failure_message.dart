@@ -21,5 +21,7 @@ String failureMessage(Failure failure) => switch (failure) {
   InvalidDataFailure() =>
     'Recebemos dados num formato inesperado. Já estamos olhando isso.',
   StorageFailure() => 'Não foi possível ler os dados salvos no aparelho.',
+  // Screens ignore cancellations; the text exists so the switch stays total.
+  CancelledFailure() => 'Consulta cancelada.',
   UnexpectedFailure() => 'Algo inesperado aconteceu. Tente de novo.',
 };
