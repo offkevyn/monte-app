@@ -91,7 +91,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('subindo o morro'), findsOneWidget);
 
-    await tester.tap(find.text('Beleza'));
+    await tester.tap(find.text('Entendi'));
     await tester.pumpAndSettle();
     expect(find.textContaining('subindo o morro'), findsNothing);
   });

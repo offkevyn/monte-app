@@ -210,6 +210,16 @@ void main() {
     );
   });
 
+  test('clear wipes the local copy, so the next read syncs again', () async {
+    await repository.loadSnapshot();
+    await repository.clear();
+    expect(await local.readSyncState(), isNull);
+    expect(await local.all(), isEmpty);
+
+    await repository.loadSnapshot();
+    expect(adapter.requestCount, 4);
+  });
+
   test('a server that repeats its cursor does not loop forever', () async {
     final result = await build(_RepeatingCursor()).loadSnapshot();
     expect(result.failureOrNull, isA<InvalidDataFailure>());

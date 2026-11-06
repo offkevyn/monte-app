@@ -85,6 +85,13 @@ final class LedgerRepositoryImpl implements LedgerRepository {
     };
   }
 
+  @override
+  Future<void> clear() async {
+    _lastSyncFailure = null;
+    _lastSyncFailedAt = null;
+    await _local.clear();
+  }
+
   /// Makes sure there is local data to answer from, syncing when needed.
   Future<Result<void>> _ensureLocalData({bool forceRefresh = false}) async {
     final stateResult = await _readLocal(_local.readSyncState);

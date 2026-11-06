@@ -20,4 +20,8 @@ abstract interface class LedgerRepository {
 
   /// A single transaction, for the detail screen.
   Future<Result<Transaction>> getTransaction(String id);
+
+  /// Deletes the local copy (on sign out, so no customer data stays on the
+  /// device).
+  Future<void> clear();
 }

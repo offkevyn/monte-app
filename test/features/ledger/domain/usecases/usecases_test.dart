@@ -47,6 +47,9 @@ class FakeLedgerRepository implements LedgerRepository {
     detailCalls.add(id);
     return detail!;
   }
+
+  @override
+  Future<void> clear() async {}
 }
 
 void main() {
