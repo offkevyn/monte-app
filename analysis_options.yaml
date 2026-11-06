@@ -36,6 +36,8 @@ linter:
     - sort_constructors_first
     - throw_in_finally
     - unawaited_futures
-    - unnecessary_lambdas
+    # unnecessary_lambdas is off on purpose: Modular binds take factories, and
+    # a constructor tear-off (X.new) makes the injector try to fill optional
+    # parameters. `() => X()` is the intended form there.
     - unnecessary_parenthesis
     - use_super_parameters
