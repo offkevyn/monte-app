@@ -67,14 +67,18 @@ final class MarketRepositoryImpl implements MarketRepository {
       final full = mapped.coins.length + mapped.skipped >= pageSize;
       return (coins: mapped.coins, skipped: mapped.skipped, hasMore: full);
     },
-    save: (fetched, now) => _local.savePage(
-      _mostTraded,
-      page,
-      fetched.coins,
-      syncedAt: now,
-      hasMore: fetched.hasMore,
-      skipped: fetched.skipped,
-    ),
+    save: (fetched, now) async {
+      final saved = await _local.savePage(
+        _mostTraded,
+        page,
+        fetched.coins,
+        syncedAt: now,
+        hasMore: fetched.hasMore,
+        skipped: fetched.skipped,
+      );
+      if (page == 1) await _local.prune(now: now);
+      return saved;
+    },
     build: _pageToList,
     forceRefresh: forceRefresh,
   );
@@ -106,7 +110,14 @@ final class MarketRepositoryImpl implements MarketRepository {
   Future<Result<MarketList>> getFavorites({bool forceRefresh = false}) async {
     final idsResult = await _guardLocal(_local.favoriteIds);
     if (idsResult case Err(:final failure)) return Err(failure);
-    final ids = idsResult.valueOrNull!;
+    return getCoins(idsResult.valueOrNull!, forceRefresh: forceRefresh);
+  }
+
+  @override
+  Future<Result<MarketList>> getCoins(
+    List<String> ids, {
+    bool forceRefresh = false,
+  }) async {
     if (ids.isEmpty) {
       return Ok(
         MarketList(
@@ -116,7 +127,7 @@ final class MarketRepositoryImpl implements MarketRepository {
       );
     }
     return _readThrough<StoredCoins, MappedCoinsPage, MarketList>(
-      key: 'favorites/${ids.join(',')}',
+      key: 'coins/${ids.join(',')}',
       readLocal: () => _local.coinsByIds(ids),
       syncedAtOf: (stored) => stored.savedAt,
       fetch: () async {
@@ -227,7 +238,11 @@ final class MarketRepositoryImpl implements MarketRepository {
       syncedAtOf: (stored) => stored.syncedAt,
       freshFor: chartFreshFor,
       fetch: () => _remote.fetchChart(id, range, cancelToken: token),
-      save: (points, now) => _local.saveChart(id, range, points, now),
+      save: (points, now) async {
+        final saved = await _local.saveChart(id, range, points, now);
+        await _local.prune(now: now);
+        return saved;
+      },
       build: (stored, freshness) => CoinChart(
         coinId: id,
         range: range,

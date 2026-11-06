@@ -264,6 +264,41 @@ final class MarketLocalDataSource {
     return StoredChart(points: points, syncedAt: syncedAt.toUtc());
   });
 
+  /// Keeps the cache small, run after saving a chart or a first page:
+  ///
+  /// - charts only of the favorites plus the [keepCharts] coins opened most
+  ///   recently (a chart is the only thing that grows with use, about 60 KB
+  ///   per coin);
+  /// - coins in no list, not starred, with no chart and not seen for
+  ///   [forgetAfter] are removed.
+  Future<void> prune({
+    required DateTime now,
+    int keepCharts = 20,
+    Duration forgetAfter = const Duration(days: 7),
+  }) => _db.transaction(() async {
+    const keptCharts =
+        'coin_id IN (SELECT coin_id FROM favorites) OR coin_id IN ('
+        'SELECT coin_id FROM chart_states GROUP BY coin_id '
+        'ORDER BY MAX(synced_at_micros) DESC LIMIT ?)';
+    for (final table in ['chart_points', 'chart_states']) {
+      await _db.customUpdate(
+        'DELETE FROM $table WHERE NOT ($keptCharts)',
+        variables: [Variable.withInt(keepCharts)],
+        updates: {_db.chartPoints, _db.chartStates},
+        updateKind: UpdateKind.delete,
+      );
+    }
+    await _db.customUpdate(
+      'DELETE FROM coins WHERE saved_at_micros < ? '
+      'AND id NOT IN (SELECT coin_id FROM list_entries) '
+      'AND id NOT IN (SELECT coin_id FROM favorites) '
+      'AND id NOT IN (SELECT coin_id FROM chart_states)',
+      variables: [Variable.withInt(_micros(now.subtract(forgetAfter)))],
+      updates: {_db.coins},
+      updateKind: UpdateKind.delete,
+    );
+  });
+
   /// Deletes everything (sign out).
   Future<void> clear() => _db.transaction(() async {
     for (final table in _db.allTables) {

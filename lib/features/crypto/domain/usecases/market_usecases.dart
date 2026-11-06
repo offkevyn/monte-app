@@ -69,3 +69,29 @@ final class SearchCoins {
   static String normalize(String query) =>
       query.trim().replaceAll(RegExp(r'\s+'), ' ');
 }
+
+/// Coins for the dashboard card: the first starred ones, or the best known
+/// coins when nothing is starred yet.
+final class LoadHighlights {
+  const LoadHighlights(this._repository);
+
+  static const size = 3;
+  static const defaults = ['bitcoin', 'ethereum', 'solana'];
+
+  final MarketRepository _repository;
+
+  Future<Result<MarketList>> call({bool forceRefresh = false}) async {
+    final favorites = await _repository.getFavorites(
+      forceRefresh: forceRefresh,
+    );
+    if (favorites case Ok(:final value) when value.coins.isNotEmpty) {
+      return Ok(
+        MarketList(
+          coins: value.coins.take(size).toList(),
+          freshness: value.freshness,
+        ),
+      );
+    }
+    return _repository.getCoins(defaults, forceRefresh: forceRefresh);
+  }
+}

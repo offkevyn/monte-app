@@ -21,6 +21,13 @@ abstract interface class MarketRepository {
   /// Starred coins with current prices, in the order they were starred.
   Future<Result<MarketList>> getFavorites({bool forceRefresh = false});
 
+  /// Specific coins, in the order of [ids] (coins CoinGecko no longer knows
+  /// are left out).
+  Future<Result<MarketList>> getCoins(
+    List<String> ids, {
+    bool forceRefresh = false,
+  });
+
   /// Coins whose name or symbol match [query]. Without a connection it
   /// searches only the coins already saved, and says so in the freshness.
   Future<Result<MarketList>> search(String query, {CancelSignal? cancel});
