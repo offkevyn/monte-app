@@ -9,6 +9,7 @@ void main() {
       UnauthorizedFailure(),
       InvalidCredentialsFailure(),
       NotFoundFailure(),
+      CancelledFailure(),
     ];
 
     for (final a in failures) {
