@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:monte/core/failures/failure.dart';
 import 'package:monte/features/ledger/domain/entities/ledger_snapshot.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_page.dart';
@@ -6,10 +7,7 @@ import 'package:monte/features/ledger/domain/entities/transaction_page.dart';
 import '../../../../helpers/transactions.dart';
 
 void main() {
-  final freshness = DataFreshness(
-    syncedAt: DateTime.utc(2026, 11, 5, 12),
-    isStale: false,
-  );
+  final freshness = DataFreshness(syncedAt: DateTime.utc(2026, 11, 5, 12));
 
   test('query validates the page size', () {
     expect(() => TransactionQuery(limit: 0), throwsArgumentError);
@@ -57,13 +55,23 @@ void main() {
 
   test('freshness is stored in UTC and compares by value', () {
     final local = DateTime.utc(2026, 11, 5, 12).toLocal();
-    final a = DataFreshness(syncedAt: local, isStale: true);
+    final a = DataFreshness(
+      syncedAt: local,
+      syncFailure: const NoConnectionFailure(),
+      skippedRecords: 2,
+    );
     expect(a.syncedAt.isUtc, isTrue);
     expect(
       a,
-      DataFreshness(syncedAt: DateTime.utc(2026, 11, 5, 12), isStale: true),
+      DataFreshness(
+        syncedAt: DateTime.utc(2026, 11, 5, 12),
+        syncFailure: const NoConnectionFailure(),
+        skippedRecords: 2,
+      ),
     );
     expect(a.hashCode, isNot(freshness.hashCode));
-    expect(a.toString(), contains('stale: true'));
+    expect(a.isStale, isTrue);
+    expect(freshness.isStale, isFalse);
+    expect(a.toString(), contains('skipped: 2'));
   });
 }
