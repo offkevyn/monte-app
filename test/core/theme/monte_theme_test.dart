@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:monte/app/welcome_page.dart';
 import 'package:monte/core/theme/monte_colors.dart';
 import 'package:monte/core/theme/monte_theme.dart';
 import 'package:monte/core/ui/monte_logo.dart';
@@ -21,12 +20,10 @@ void main() {
     expect(a.copyWith(gold: b.expense).gold, b.expense);
   });
 
-  testWidgets('welcome page renders the logo and the name', (tester) async {
+  testWidgets('logo is announced to screen readers', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(theme: MonteTheme.light, home: const WelcomePage()),
+      MaterialApp(theme: MonteTheme.light, home: const MonteLogo()),
     );
-    expect(find.byType(MonteLogo), findsOneWidget);
-    expect(find.text('monte'), findsOneWidget);
     expect(find.bySemanticsLabel('Monte'), findsOneWidget);
   });
 

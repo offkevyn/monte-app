@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:sqlite3/common.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../security/random_hex.dart';
 import 'secure_store.dart';
 
 /// Creates (once) and returns the random key of the local database.
@@ -24,10 +25,7 @@ final class DatabaseKeyProvider {
     if (existing != null && EncryptedDatabase.isValidKey(existing)) {
       return existing;
     }
-    final key = List.generate(
-      32,
-      (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-    ).join();
+    final key = randomHex(_random, 32);
     await _store.write(storageKey, key);
     return key;
   }

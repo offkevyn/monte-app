@@ -16,7 +16,20 @@ String failureMessage(Failure failure) => switch (failure) {
         : 'Muitas consultas em pouco tempo. '
               'Tente de novo em ${retryAfter.inSeconds}s.',
   UnauthorizedFailure() => 'Sua sessão expirou. Entre de novo.',
-  InvalidCredentialsFailure() => 'CPF ou senha incorretos.',
+  InvalidCredentialsFailure(:final attemptsLeft) => switch (attemptsLeft) {
+    null || 0 => 'CPF ou senha incorretos.',
+    1 =>
+      'Senha incorreta. Você tem mais 1 tentativa antes do bloqueio '
+          'temporário.',
+    final left =>
+      'Senha incorreta. Você tem mais $left tentativas antes do '
+          'bloqueio temporário.',
+  },
+  AccountLockedFailure(:final retryAfter) =>
+    retryAfter == null
+        ? 'Acesso bloqueado por segurança. Tente de novo mais tarde.'
+        : 'Acesso bloqueado por segurança. Tente de novo em '
+              '${(retryAfter.inSeconds / 60).ceil()} min.',
   NotFoundFailure() => 'Não encontramos o que você procurou.',
   InvalidDataFailure() =>
     'Recebemos dados num formato inesperado. Já estamos olhando isso.',

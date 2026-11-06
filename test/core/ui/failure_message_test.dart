@@ -11,6 +11,8 @@ void main() {
       const RateLimitedFailure(),
       const UnauthorizedFailure(),
       const InvalidCredentialsFailure(),
+      const InvalidCredentialsFailure(attemptsLeft: 2),
+      const AccountLockedFailure(),
       const NotFoundFailure(),
       const InvalidDataFailure('amount missing'),
       const StorageFailure('db locked'),
@@ -29,6 +31,27 @@ void main() {
         const RateLimitedFailure(retryAfter: Duration(seconds: 30)),
       ),
       contains('30s'),
+    );
+  });
+
+  test('login messages count the attempts left and the lock time', () {
+    expect(
+      failureMessage(const InvalidCredentialsFailure(attemptsLeft: 2)),
+      contains('mais 2 tentativas'),
+    );
+    expect(
+      failureMessage(const InvalidCredentialsFailure(attemptsLeft: 1)),
+      contains('mais 1 tentativa '),
+    );
+    expect(
+      failureMessage(const InvalidCredentialsFailure()),
+      'CPF ou senha incorretos.',
+    );
+    expect(
+      failureMessage(
+        const AccountLockedFailure(retryAfter: Duration(seconds: 250)),
+      ),
+      contains('5 min'),
     );
   });
 

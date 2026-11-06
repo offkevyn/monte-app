@@ -10,11 +10,18 @@ import '../result/result.dart';
 /// Parsing problems (a field with the wrong type, an unknown status) become
 /// [InvalidDataFailure] instead of crashing the app: the response is treated
 /// as untrusted input.
-Future<Result<T>> guardRequest<T>(Future<T> Function() request) async {
+///
+/// [mapError] lets a feature read error bodies it knows about (e.g. the
+/// login's attempts left); returning `null` falls back to the generic
+/// mapping.
+Future<Result<T>> guardRequest<T>(
+  Future<T> Function() request, {
+  Failure? Function(DioException error)? mapError,
+}) async {
   try {
     return Ok(await request());
   } on DioException catch (error) {
-    return Err(failureFromDio(error));
+    return Err(mapError?.call(error) ?? failureFromDio(error));
   } on FormatException catch (error) {
     return Err(InvalidDataFailure(error.message));
   } on ArgumentError catch (error) {

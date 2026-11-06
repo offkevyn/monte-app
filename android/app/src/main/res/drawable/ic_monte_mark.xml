@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monte mark: mountain whose last ridge becomes a chart arrow, gold coin. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp" android:height="120dp"
+    android:viewportWidth="120" android:viewportHeight="120">
+    <group>
+        <path android:fillColor="#1A7A50" android:pathData="M16,94 L44,50 L60,72 L84,36 L104,94 Z" />
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="9" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M16,94 L44,50 L60,72 L84,36" />
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="9" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M71,35 L85,34 L86,48" />
+        <path android:fillColor="#F5C531" android:pathData="M45,30 A9,9 0 1,1 27,30 A9,9 0 1,1 45,30 Z" />
+    </group>
+</vector>
