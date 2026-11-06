@@ -1,6 +1,7 @@
 import 'package:flutter_modular/flutter_modular.dart';
 
 import '../core/core_module.dart';
+import '../core/money/money_formatter.dart';
 import '../core/network/api_client_factory.dart';
 import '../core/network/bank_api.dart';
 import '../core/network/fake/fake_http_adapter.dart';
@@ -21,6 +22,18 @@ import '../features/auth/presentation/login/login_cubit.dart';
 import '../features/auth/presentation/login/login_page.dart';
 import '../features/auth/presentation/splash/splash_cubit.dart';
 import '../features/auth/presentation/splash/splash_page.dart';
+import '../features/crypto/crypto_module.dart';
+import '../features/crypto/data/coingecko/coingecko_config.dart';
+import '../features/crypto/data/coingecko/market_remote_datasource.dart';
+import '../features/crypto/data/coingecko/simulated_conditions_interceptor.dart';
+import '../features/crypto/data/local/market_database.dart';
+import '../features/crypto/data/local/market_local_datasource.dart';
+import '../features/crypto/data/market_repository_impl.dart';
+import '../features/crypto/domain/repositories/market_repository.dart';
+import '../features/crypto/domain/usecases/market_usecases.dart';
+import '../features/crypto/presentation/crypto_formatter.dart';
+import '../features/crypto/presentation/highlights/crypto_highlights_cubit.dart';
+import '../features/crypto/presentation/list/crypto_list_cubit.dart';
 import '../features/dashboard/presentation/dashboard_cubit.dart';
 import '../features/ledger/data/datasources/ledger_remote_datasource.dart';
 import '../features/ledger/data/fake/fake_ledger_server.dart';
@@ -144,6 +157,54 @@ class AppModule extends Module {
           Modular.get<LocalCalendar>(),
         ),
       )
+      // Crypto: real CoinGecko, saved in its own encrypted database.
+      ..addLazySingleton<MarketDatabase>(
+        () => openMarketDatabase(Modular.get<DatabaseKeyProvider>()),
+      )
+      ..addLazySingleton<MarketRepository>(
+        () => MarketRepositoryImpl(
+          remote: CoinGeckoRemoteDataSource(
+            ApiClientFactory.create(
+              baseUrl: CoinGeckoConfig.baseUrl,
+              headers: CoinGeckoConfig.headers(),
+              interceptors: [
+                SimulatedConditionsInterceptor(
+                  Modular.get<FakeBackendSettings>(),
+                  Modular.get<Clock>(),
+                ),
+              ],
+            ),
+          ),
+          local: MarketLocalDataSource(Modular.get<MarketDatabase>()),
+          clock: Modular.get<Clock>(),
+        ),
+      )
+      ..addSingleton<CryptoFormatter>(
+        () => CryptoFormatter(Modular.get<MoneyFormatter>()),
+      )
+      ..add<LoadMarketTab>(
+        () => LoadMarketTab(
+          Modular.get<MarketRepository>(),
+          Modular.get<Clock>(),
+        ),
+      )
+      ..add<SearchCoins>(
+        () =>
+            SearchCoins(Modular.get<MarketRepository>(), Modular.get<Clock>()),
+      )
+      ..add<LoadHighlights>(
+        () => LoadHighlights(Modular.get<MarketRepository>()),
+      )
+      ..add<CryptoListCubit>(
+        () => CryptoListCubit(
+          Modular.get<LoadMarketTab>(),
+          Modular.get<SearchCoins>(),
+          Modular.get<MarketRepository>(),
+        ),
+      )
+      ..add<CryptoHighlightsCubit>(
+        () => CryptoHighlightsCubit(Modular.get<LoadHighlights>()),
+      )
       ..add<LoginCubit>(
         () => LoginCubit(
           Modular.get<SignIn>(),
@@ -168,6 +229,7 @@ class AppModule extends Module {
         child: (_) => const HomeShell(),
         transition: TransitionType.fadeIn,
       )
-      ..module(Routes.statement, module: StatementModule());
+      ..module(Routes.statement, module: StatementModule())
+      ..module(Routes.crypto, module: CryptoModule());
   }
 }

@@ -12,4 +12,13 @@ abstract final class Routes {
 
   static String statementDetail(String id) =>
       '$statement/transacao/${Uri.encodeComponent(id)}';
+
+  /// Module of the crypto screens.
+  static const crypto = '/cripto';
+
+  /// Detail of one coin: `/cripto/moeda/bitcoin`.
+  static const cryptoCoinPattern = '/moeda/:id';
+
+  static String cryptoCoin(String id) =>
+      '$crypto/moeda/${Uri.encodeComponent(id)}';
 }
