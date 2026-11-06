@@ -30,6 +30,9 @@ import '../features/ledger/data/local/open_ledger_database.dart';
 import '../features/ledger/data/repositories/ledger_repository_impl.dart';
 import '../features/ledger/domain/repositories/ledger_repository.dart';
 import '../features/ledger/domain/usecases/get_dashboard.dart';
+import '../features/ledger/domain/usecases/get_statement_page.dart';
+import '../features/statement/presentation/bloc/statement_bloc.dart';
+import '../features/statement/statement_module.dart';
 import 'home_shell.dart';
 import 'routes.dart';
 
@@ -126,6 +129,21 @@ class AppModule extends Module {
           Modular.get<BiometricAuthenticator>(),
         ),
       )
+      // Statement
+      ..add<GetStatementPage>(
+        () => GetStatementPage(Modular.get<LedgerRepository>()),
+      )
+      ..add<RefreshLedger>(() => RefreshLedger(Modular.get<LedgerRepository>()))
+      ..add<CountTransactions>(
+        () => CountTransactions(Modular.get<LedgerRepository>()),
+      )
+      ..add<StatementBloc>(
+        () => StatementBloc(
+          Modular.get<GetStatementPage>(),
+          Modular.get<RefreshLedger>(),
+          Modular.get<LocalCalendar>(),
+        ),
+      )
       ..add<LoginCubit>(
         () => LoginCubit(
           Modular.get<SignIn>(),
@@ -149,6 +167,7 @@ class AppModule extends Module {
         Routes.home,
         child: (_) => const HomeShell(),
         transition: TransitionType.fadeIn,
-      );
+      )
+      ..module(Routes.statement, module: StatementModule());
   }
 }

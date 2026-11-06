@@ -44,6 +44,22 @@ final class DateLabels {
     return date.year == today.year ? base : '$base de ${date.year}';
   }
 
+  /// Statement section header: `Hoje · 5 de nov`, `Ontem · 4 de nov`,
+  /// `Seg · 2 de nov` (with the year when not this one).
+  String dayHeader(LocalDate date) {
+    final today = this.today;
+    final name = switch (date) {
+      _ when date == today => 'Hoje',
+      _ when date == today.addDays(-1) => 'Ontem',
+      _ => _capitalize(_weekdays[date.weekday - 1]),
+    };
+    final base = '$name · ${date.day} de ${monthShort(date)}';
+    return date.year == today.year ? base : '$base de ${date.year}';
+  }
+
+  static String _capitalize(String text) =>
+      '${text[0].toUpperCase()}${text.substring(1)}';
+
   /// `Hoje · 14:32`, `Ontem · 09:10`, `04/11 · 19:47`.
   String dayAndTime(DateTime instant) {
     final date = _calendar.dateOf(instant);
@@ -57,6 +73,10 @@ final class DateLabels {
     return '$day · ${time(instant)}';
   }
 
+  /// `04/11/2026 · 19:47`, for the detail screen.
+  String fullDateAndTime(DateTime instant) =>
+      '${fullDate(_calendar.dateOf(instant))} · ${time(instant)}';
+
   /// `30/10`
   String shortDate(LocalDate date) => '${_two(date.day)}/${_two(date.month)}';
 
@@ -64,10 +84,7 @@ final class DateLabels {
   String fullDate(LocalDate date) => '${shortDate(date)}/${date.year}';
 
   /// `Novembro`
-  String month(LocalDate date) {
-    final name = _months[date.month - 1];
-    return '${name[0].toUpperCase()}${name.substring(1)}';
-  }
+  String month(LocalDate date) => _capitalize(_months[date.month - 1]);
 
   /// `nov`
   String monthShort(LocalDate date) => _months[date.month - 1].substring(0, 3);

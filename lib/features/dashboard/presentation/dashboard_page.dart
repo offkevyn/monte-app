@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_modular/flutter_modular.dart'
     hide ModularWatchExtension;
 
+import '../../../app/routes.dart';
 import '../../../core/failures/failure.dart';
 import '../../../core/money/money_formatter.dart';
 import '../../../core/theme/monte_theme.dart';
@@ -15,10 +16,10 @@ import '../../../core/ui/skeleton.dart';
 import '../../../core/ui/under_construction.dart';
 import '../../auth/presentation/current_session.dart';
 import '../../ledger/domain/entities/date_span.dart';
-import '../../ledger/domain/entities/ledger_snapshot.dart';
 import '../../ledger/domain/usecases/get_dashboard.dart';
 import '../../ledger/presentation/ledger_labels.dart';
 import '../../ledger/presentation/widgets/sensitive_value.dart';
+import '../../ledger/presentation/widgets/stale_banner.dart';
 import '../../ledger/presentation/widgets/transaction_tile.dart';
 import 'dashboard_cubit.dart';
 import 'widgets/movement_chart.dart';
@@ -57,8 +58,14 @@ class DashboardView extends StatelessWidget {
     required this.theme,
     required this.onOpenStatement,
     required this.onOpenCrypto,
+    this.onOpenDetail = _openDetail,
   });
 
+  static void _openDetail(String id) =>
+      Modular.to.pushNamed(Routes.statementDetail(id));
+
+  /// Opens a transaction; overridable so tests do not need the router.
+  final ValueChanged<String> onOpenDetail;
   final String customerName;
   final MoneyFormatter money;
   final DateLabels dates;
@@ -146,8 +153,11 @@ class DashboardView extends StatelessWidget {
         final summary = state.summary!;
         return [
           if (summary.freshness.isStale)
-            SliverToBoxAdapter(
-              child: _StaleBanner(freshness: summary.freshness, dates: dates),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: StaleBanner(freshness: summary.freshness, dates: dates),
+              ),
             ),
           SliverToBoxAdapter(
             child: _Shortcuts(
@@ -196,6 +206,7 @@ class DashboardView extends StatelessWidget {
                             money: money,
                             dates: dates,
                             hidden: state.balanceHidden,
+                            onTap: () => onOpenDetail(transaction.id),
                           ),
                       ],
                     ),
@@ -535,51 +546,6 @@ class _CardSkeleton extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Yellow strip: the numbers are from the local copy.
-class _StaleBanner extends StatelessWidget {
-  const _StaleBanner({required this.freshness, required this.dates});
-
-  final DataFreshness freshness;
-  final DateLabels dates;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.monte;
-    final reason = freshness.syncFailure is NoConnectionFailure
-        ? 'Sem conexão.'
-        : 'Não deu pra atualizar.';
-    final when = dates.dayAndTime(freshness.syncedAt).replaceAll(' · ', ', ');
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-      child: Semantics(
-        liveRegion: true,
-        child: Container(
-          key: const Key('dashboard.stale'),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: colors.gold.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.wifi_off_rounded, size: 18, color: colors.warning),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '$reason Mostrando dados de ${when[0].toLowerCase()}'
-                  '${when.substring(1)}.',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _Shortcuts extends StatelessWidget {

@@ -89,6 +89,15 @@ final class LedgerLocalDataSource {
     return rows.map(_toEntity).toList();
   }
 
+  /// Same conditions as [page], counted in SQL.
+  Future<int> count(TransactionFilter filter) async {
+    final count = _db.transactions.id.count();
+    final query = _db.selectOnly(_db.transactions)
+      ..addColumns([count])
+      ..where(_conditions(_db.transactions, filter, null));
+    return (await query.getSingle()).read(count) ?? 0;
+  }
+
   Future<Transaction?> byId(String id) async {
     final row = await (_db.select(
       _db.transactions,

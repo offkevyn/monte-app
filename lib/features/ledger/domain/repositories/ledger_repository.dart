@@ -1,6 +1,7 @@
 import '../../../../core/result/result.dart';
 import '../entities/ledger_snapshot.dart';
 import '../entities/transaction.dart';
+import '../entities/transaction_filter.dart';
 import '../entities/transaction_page.dart';
 
 /// What the domain needs from the data layer. The implementation decides
@@ -17,6 +18,10 @@ abstract interface class LedgerRepository {
 
   /// One page of the statement, newest first, already filtered.
   Future<Result<TransactionPage>> getTransactions(TransactionQuery query);
+
+  /// How many transactions match [filter], for the "Ver N transações"
+  /// button of the filter sheet.
+  Future<Result<int>> countTransactions(TransactionFilter filter);
 
   /// A single transaction, for the detail screen.
   Future<Result<Transaction>> getTransaction(String id);
