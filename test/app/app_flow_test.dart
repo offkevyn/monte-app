@@ -59,9 +59,10 @@ void main() {
       ModularApp(module: AppModule(), child: const AppWidget()),
     );
 
-    // Splash animation, then the login.
+    // Splash animation, then the login (the start screen is decided from
+    // the secure store, which answers on real async).
+    await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
     await tester.pumpAndSettle();
-    expect(find.text('Entre com seu CPF e senha.'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('login.demo')));
     await tester.pump();
