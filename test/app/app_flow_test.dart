@@ -54,32 +54,49 @@ void main() {
     }
   });
 
-  testWidgets('splash -> login -> dashboard -> sign out', (tester) async {
-    await tester.pumpWidget(
-      ModularApp(module: AppModule(), child: const AppWidget()),
-    );
+  testWidgets(
+    'splash -> login -> dashboard -> statement -> detail -> sign out',
+    (tester) async {
+      await tester.pumpWidget(
+        ModularApp(module: AppModule(), child: const AppWidget()),
+      );
 
-    // Splash animation, then the login (the start screen is decided from
-    // the secure store, which answers on real async).
-    await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
-    await tester.pumpAndSettle();
+      // Splash animation, then the login (the start screen is decided from
+      // the secure store, which answers on real async).
+      await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('login.demo')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('login.submit')));
+      await tester.tap(find.byKey(const Key('login.demo')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('login.submit')));
 
-    // No fingerprint in the test environment, so no offer: straight to the
-    // dashboard, filled from the simulated bank through the encrypted
-    // database.
-    await pumpUntilFound(tester, find.byKey(const Key('dashboard.balance')));
-    expect(find.text('Saldo disponível'), findsOneWidget);
-    expect(find.text('Kevyn'), findsOneWidget);
+      // No fingerprint in the test environment, so no offer: straight to the
+      // dashboard, filled from the simulated bank through the encrypted
+      // database.
+      await pumpUntilFound(tester, find.byKey(const Key('dashboard.balance')));
+      expect(find.text('Saldo disponível'), findsOneWidget);
+      expect(find.text('Kevyn'), findsOneWidget);
 
-    await tester.tap(find.text('Perfil'));
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.byKey(const Key('home.signOut')));
-    await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
-  });
+      // Statement tab, then a transaction through the named route
+      // /extrato/transacao/:id, and back to the same list.
+      await tester.tap(find.text('Extrato').last);
+      await pumpUntilFound(tester, find.byKey(const Key('statement.search')));
+      await pumpUntilFound(tester, find.textContaining(' · ').first);
+      await tester.tap(find.byType(InkWell).at(3));
+      await pumpUntilFound(tester, find.byKey(const Key('detail.amount')));
+      expect(find.text('Detalhes'), findsOneWidget);
+      await tester.tap(find.byTooltip('Voltar'));
+      await pumpUntilFound(tester, find.byKey(const Key('statement.search')));
+      // Let the closing transition of the detail finish.
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const Key('detail.amount')), findsNothing);
+
+      await tester.tap(find.text('Perfil'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.byKey(const Key('home.signOut')));
+      await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
+    },
+  );
 }
 
 final class _TempPathProvider extends PathProviderPlatform

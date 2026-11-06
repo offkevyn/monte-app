@@ -6,6 +6,7 @@ import '../features/auth/domain/usecases/auth_usecases.dart';
 import '../features/auth/presentation/current_session.dart';
 import '../features/dashboard/presentation/dashboard_page.dart';
 import '../features/ledger/domain/repositories/ledger_repository.dart';
+import '../features/statement/presentation/statement_page.dart';
 import 'routes.dart';
 
 /// Signed-in area with the bottom bar. Tabs live in an IndexedStack, so each
@@ -31,11 +32,7 @@ class _HomeShellState extends State<HomeShell> {
           onOpenStatement: () => _go(1),
           onOpenCrypto: () => _go(2),
         ),
-        const _ComingTab(
-          icon: Icons.receipt_long_rounded,
-          title: 'Extrato',
-          text: 'O extrato completo chega na próxima etapa.',
-        ),
+        const StatementPage(),
         const _ComingTab(
           icon: Icons.currency_bitcoin_rounded,
           title: 'Cripto',
