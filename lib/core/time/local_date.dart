@@ -34,6 +34,13 @@ final class LocalDate implements Comparable<LocalDate> {
   LocalDate addDays(int days) =>
       LocalDate._fromUtcFields(DateTime.utc(year, month, day + days));
 
+  /// Whole days from this date to [other]; negative when [other] is earlier.
+  /// Exact because UTC days always have 24 hours.
+  int daysUntil(LocalDate other) =>
+      other._utcMidnight.difference(_utcMidnight).inDays;
+
+  DateTime get _utcMidnight => DateTime.utc(year, month, day);
+
   LocalDate get firstDayOfMonth => LocalDate._(year, month, 1);
 
   /// Day 0 of the next month is the last day of this one, which handles

@@ -17,6 +17,14 @@ void main() {
       expect(LocalDate(2028, 3, 1).addDays(-1), LocalDate(2028, 2, 29));
     });
 
+    test('counts whole days between dates', () {
+      final start = LocalDate(2026, 11, 5);
+      expect(start.daysUntil(start), 0);
+      expect(start.daysUntil(LocalDate(2026, 12, 5)), 30);
+      expect(start.daysUntil(LocalDate(2026, 11, 1)), -4);
+      expect(LocalDate(2028, 2, 28).daysUntil(LocalDate(2028, 3, 1)), 2);
+    });
+
     test('finds the first and last day of the month', () {
       expect(LocalDate(2026, 11, 17).firstDayOfMonth, LocalDate(2026, 11, 1));
       expect(LocalDate(2026, 11, 17).lastDayOfMonth, LocalDate(2026, 11, 30));
