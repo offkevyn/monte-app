@@ -21,6 +21,10 @@ abstract interface class LedgerRemoteDataSource {
     String id, {
     CancelToken? cancelToken,
   });
+
+  /// Unfiltered page used to copy the whole account to the local database.
+  /// Bigger than a screen page, so a full sync needs few requests.
+  Future<TransactionPageDto> fetchSyncPage({String? cursor, int limit});
 }
 
 final class DioLedgerRemoteDataSource implements LedgerRemoteDataSource {
@@ -60,6 +64,20 @@ final class DioLedgerRemoteDataSource implements LedgerRemoteDataSource {
       cancelToken: cancelToken,
     ),
   );
+
+  @override
+  Future<TransactionPageDto> fetchSyncPage({
+    String? cursor,
+    int limit = syncPageSize,
+  }) async => TransactionPageDto.fromJson(
+    await _get(
+      '/v1/transactions',
+      query: {'limit': '$limit', 'cursor': ?cursor},
+    ),
+  );
+
+  /// The server accepts up to 500 per page.
+  static const syncPageSize = 500;
 
   Future<Object?> _get(
     String path, {
