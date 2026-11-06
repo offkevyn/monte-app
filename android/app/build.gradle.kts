@@ -47,3 +47,9 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // local_auth asks for an AppCompat launch theme (crashes on Android 8
+    // and below otherwise); the plugin itself does not bring AppCompat.
+    implementation("androidx.appcompat:appcompat:1.7.1")
+}

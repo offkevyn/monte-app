@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ system splash: brand green and the mark. -->
+    <style name="LaunchTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/monte_deep</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_monte_splash</item>
+        <item name="android:windowBackground">@color/monte_deep</item>
+    </style>
+    <style name="NormalTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/monte_deep</item>
+    </style>
+</resources>

@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Native splash (Android 11 and below): brand green with the mark, so the
+     handoff to the animated Flutter splash has no white flash. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/monte_deep" />
+    <item android:width="120dp" android:height="120dp" android:gravity="center"
+        android:drawable="@drawable/ic_monte_mark" />
 </layer-list>
