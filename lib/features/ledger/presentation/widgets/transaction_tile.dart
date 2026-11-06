@@ -21,7 +21,16 @@ class TransactionTile extends StatelessWidget {
     this.hidden = false,
     this.showDay = true,
     this.onTap,
+    this.heroTagPrefix,
   });
+
+  /// Hero tags for the icon and the amount, so they fly into the detail
+  /// screen. Only one list per route may set it (tags must be unique).
+  final String? heroTagPrefix;
+
+  static String iconHeroTag(String prefix, String id) => '$prefix-icon-$id';
+
+  static String amountHeroTag(String prefix, String id) => '$prefix-amount-$id';
 
   final Transaction transaction;
   final MoneyFormatter money;
@@ -44,13 +53,16 @@ class TransactionTile extends StatelessWidget {
     final notCounted =
         t.status == TransactionStatus.failed ||
         t.status == TransactionStatus.reversed;
+    // Dashboard: `Hoje · 14:32`. Statement (under a day header):
+    // `14:32 · Pix`, with the status always visible.
     final when = showDay
         ? dates.dayAndTime(t.occurredAt)
-        : dates.time(t.occurredAt);
+        : '${dates.time(t.occurredAt)} · ${LedgerLabels.method(t.method)}';
     final amount = money.format(t.signedAmount, showPlusSign: true);
-    final status = t.status == TransactionStatus.completed
+    final status = showDay && t.status == TransactionStatus.completed
         ? null
         : LedgerLabels.status(t.status);
+    final prefix = heroTagPrefix;
 
     // One node per transaction, so a screen reader reads each on its own.
     return Semantics(
@@ -71,15 +83,18 @@ class TransactionTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: color.withValues(alpha: 0.12),
-                child: Icon(
-                  t.isIncome
-                      ? Icons.south_west_rounded
-                      : Icons.north_east_rounded,
-                  color: color,
-                  size: 20,
+              _maybeHero(
+                prefix == null ? null : iconHeroTag(prefix, t.id),
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: color.withValues(alpha: 0.12),
+                  child: Icon(
+                    t.isIncome
+                        ? Icons.south_west_rounded
+                        : Icons.north_east_rounded,
+                    color: color,
+                    size: 20,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -118,14 +133,19 @@ class TransactionTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              SensitiveValue(
-                hidden: hidden,
-                child: Text(
-                  amount,
-                  style: text.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: notCounted ? colors.subtle : color,
-                    decoration: notCounted ? TextDecoration.lineThrough : null,
+              _maybeHero(
+                prefix == null ? null : amountHeroTag(prefix, t.id),
+                SensitiveValue(
+                  hidden: hidden,
+                  child: Text(
+                    amount,
+                    style: text.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: notCounted ? colors.subtle : color,
+                      decoration: notCounted
+                          ? TextDecoration.lineThrough
+                          : null,
+                    ),
                   ),
                 ),
               ),
@@ -135,6 +155,24 @@ class TransactionTile extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _maybeHero(String? tag, Widget child) => tag == null
+    ? child
+    : Hero(
+        tag: tag,
+        child: Material(type: MaterialType.transparency, child: child),
+      );
+
+/// Small colored label with the status written out.
+class StatusChip extends StatelessWidget {
+  const StatusChip({super.key, required this.status});
+
+  final TransactionStatus status;
+
+  @override
+  Widget build(BuildContext context) =>
+      _StatusChip(status: status, label: LedgerLabels.status(status));
 }
 
 class _StatusChip extends StatelessWidget {
