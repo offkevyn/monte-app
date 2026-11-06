@@ -6,7 +6,9 @@ import 'security/biometric_authenticator.dart';
 import 'storage/app_preferences.dart';
 import 'storage/encrypted_database.dart';
 import 'storage/secure_store.dart';
+import 'theme/theme_controller.dart';
 import 'time/clock.dart';
+import 'time/date_labels.dart';
 import 'time/local_calendar.dart';
 
 /// Dependencies shared by every feature. Feature modules list it in
@@ -30,6 +32,12 @@ class CoreModule extends Module {
       ..addSingleton<DatabaseKeyProvider>(
         () => DatabaseKeyProvider(Modular.get<SecureStore>()),
       )
-      ..addSingleton<FakeBackendSettings>(() => FakeBackendSettings());
+      ..addSingleton<FakeBackendSettings>(() => FakeBackendSettings())
+      ..addSingleton<DateLabels>(
+        () => DateLabels(Modular.get<Clock>(), Modular.get<LocalCalendar>()),
+      )
+      ..addSingleton<ThemeController>(
+        () => ThemeController(Modular.get<AppPreferences>()),
+      );
   }
 }

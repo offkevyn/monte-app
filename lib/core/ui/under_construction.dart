@@ -63,14 +63,15 @@ class _UnderConstructionDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Essa parte ainda está em construção. Logo chega por aqui.',
+                  'Essa função chega numa próxima versão do Monte. Enquanto isso, '
+                  'dá uma olhada no seu extrato.',
                   textAlign: TextAlign.center,
                   style: text.bodyMedium?.copyWith(color: context.monte.subtle),
                 ),
                 const SizedBox(height: 20),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Beleza'),
+                  child: const Text('Entendi'),
                 ),
               ],
             ),

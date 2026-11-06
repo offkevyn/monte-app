@@ -1,43 +1,60 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monte/app/app_module.dart';
 import 'package:monte/app/app_widget.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
-/// The real app (real modules, real binds, simulated bank) with only the
-/// platform storage replaced by in-memory versions. Catches wiring mistakes
-/// that unit tests cannot, like a bind the injector cannot build.
-/// Part of the request path (Dio's transformer, the storage mocks) runs on
-/// real async work, which the fake clock of widget tests never advances.
-/// Alternates a little real time with fake frames until things settle.
-Future<void> settleWithRealAsync(WidgetTester tester) async {
-  for (var i = 0; i < 20; i++) {
+/// Part of the work (Dio's transformer, the storage mocks, the database
+/// isolate) runs on real async, which the fake clock of widget tests never
+/// advances. Alternates real time with fake frames until [target] shows up.
+Future<void> pumpUntilFound(
+  WidgetTester tester,
+  Finder target, {
+  Duration timeout = const Duration(seconds: 20),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
     await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
     );
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 100));
+    if (target.evaluate().isNotEmpty) return;
   }
-  await tester.pumpAndSettle();
+  fail('Timed out waiting for $target');
 }
 
-/// The real app (real modules, real binds, simulated bank) with only the
-/// platform storage replaced by in-memory versions. Catches wiring mistakes
-/// that unit tests cannot, like a bind the injector cannot build.
+/// The real app (real modules, real binds, simulated bank, real encrypted
+/// database in a temp folder) with only platform storage replaced by
+/// in-memory versions. Catches wiring mistakes that unit tests cannot, like
+/// a bind the injector cannot build.
 void main() {
+  late Directory support;
+
   setUp(() {
+    support = Directory.systemTemp.createTempSync('monte_app_');
+    PathProviderPlatform.instance = _TempPathProvider(support.path);
     FlutterSecureStorage.setMockInitialValues({});
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.empty();
   });
 
-  tearDown(Modular.destroy);
+  tearDown(() {
+    Modular.destroy();
+    try {
+      support.deleteSync(recursive: true);
+    } on FileSystemException {
+      // The database isolate may still hold the file on Windows.
+    }
+  });
 
-  testWidgets('splash -> login -> demo account -> home -> sign out', (
-    tester,
-  ) async {
+  testWidgets('splash -> login -> dashboard -> sign out', (tester) async {
     await tester.pumpWidget(
       ModularApp(module: AppModule(), child: const AppWidget()),
     );
@@ -49,14 +66,33 @@ void main() {
     await tester.tap(find.byKey(const Key('login.demo')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('login.submit')));
-    await settleWithRealAsync(tester);
 
-    // No fingerprint in the test environment, so no offer: straight in.
-    expect(find.text('Olá, Kevyn 👋'), findsOneWidget);
-    expect(find.text('Conta 0001 · 12345-6'), findsOneWidget);
+    // No fingerprint in the test environment, so no offer: straight to the
+    // dashboard, filled from the simulated bank through the encrypted
+    // database.
+    await pumpUntilFound(tester, find.byKey(const Key('dashboard.balance')));
+    expect(find.text('Saldo disponível'), findsOneWidget);
+    expect(find.text('Kevyn'), findsOneWidget);
 
+    await tester.tap(find.text('Perfil'));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byKey(const Key('home.signOut')));
-    await settleWithRealAsync(tester);
-    expect(find.text('Entre com seu CPF e senha.'), findsOneWidget);
+    await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
   });
+}
+
+final class _TempPathProvider extends PathProviderPlatform
+    with MockPlatformInterfaceMixin {
+  _TempPathProvider(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> getApplicationSupportPath() async => path;
+
+  @override
+  Future<String?> getTemporaryPath() async => path;
+
+  @override
+  Future<String?> getApplicationDocumentsPath() async => path;
 }

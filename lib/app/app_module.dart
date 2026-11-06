@@ -7,8 +7,10 @@ import '../core/network/fake/fake_http_adapter.dart';
 import '../core/network/fake/fake_scenario.dart';
 import '../core/security/biometric_authenticator.dart';
 import '../core/storage/app_preferences.dart';
+import '../core/storage/encrypted_database.dart';
 import '../core/storage/secure_store.dart';
 import '../core/time/clock.dart';
+import '../core/time/local_calendar.dart';
 import '../features/auth/data/auth_data.dart';
 import '../features/auth/data/fake/fake_auth_server.dart';
 import '../features/auth/domain/entities/cpf.dart';
@@ -19,8 +21,16 @@ import '../features/auth/presentation/login/login_cubit.dart';
 import '../features/auth/presentation/login/login_page.dart';
 import '../features/auth/presentation/splash/splash_cubit.dart';
 import '../features/auth/presentation/splash/splash_page.dart';
+import '../features/dashboard/presentation/dashboard_cubit.dart';
+import '../features/ledger/data/datasources/ledger_remote_datasource.dart';
 import '../features/ledger/data/fake/fake_ledger_server.dart';
-import 'home_placeholder_page.dart';
+import '../features/ledger/data/local/ledger_database.dart';
+import '../features/ledger/data/local/ledger_local_datasource.dart';
+import '../features/ledger/data/local/open_ledger_database.dart';
+import '../features/ledger/data/repositories/ledger_repository_impl.dart';
+import '../features/ledger/domain/repositories/ledger_repository.dart';
+import '../features/ledger/domain/usecases/get_dashboard.dart';
+import 'home_shell.dart';
 import 'routes.dart';
 
 /// Composition root: wires the simulated bank, the auth feature and the
@@ -84,6 +94,38 @@ class AppModule extends Module {
           Modular.get<CurrentSession>(),
         ),
       )
+      // Ledger: one encrypted database, one repository (single source of
+      // truth for dashboard, statement and detail).
+      ..addLazySingleton<LedgerDatabase>(
+        () => openLedgerDatabase(Modular.get<DatabaseKeyProvider>()),
+      )
+      ..addLazySingleton<LedgerRepository>(
+        () => LedgerRepositoryImpl(
+          remote: DioLedgerRemoteDataSource(
+            Modular.get<BankApi>().dio,
+            Modular.get<LocalCalendar>(),
+          ),
+          local: LedgerLocalDataSource(
+            Modular.get<LedgerDatabase>(),
+            Modular.get<LocalCalendar>(),
+          ),
+          clock: Modular.get<Clock>(),
+        ),
+      )
+      ..add<GetDashboard>(
+        () => GetDashboard(
+          Modular.get<LedgerRepository>(),
+          Modular.get<Clock>(),
+          Modular.get<LocalCalendar>(),
+        ),
+      )
+      ..add<DashboardCubit>(
+        () => DashboardCubit(
+          Modular.get<GetDashboard>(),
+          Modular.get<AppPreferences>(),
+          Modular.get<BiometricAuthenticator>(),
+        ),
+      )
       ..add<LoginCubit>(
         () => LoginCubit(
           Modular.get<SignIn>(),
@@ -105,7 +147,7 @@ class AppModule extends Module {
       )
       ..child(
         Routes.home,
-        child: (_) => const HomePlaceholderPage(),
+        child: (_) => const HomeShell(),
         transition: TransitionType.fadeIn,
       );
   }
