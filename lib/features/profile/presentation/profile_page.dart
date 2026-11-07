@@ -20,7 +20,9 @@ class ProfilePage extends StatelessWidget {
 
   /// Called after the dev scenario picker changed something, so the signed
   /// in screens load again under the new scenario.
-  final VoidCallback onDataReset;
+  /// Called after the dev picker changed the simulated bank, with whether
+  /// the saved data must go (new volume = different transactions).
+  final ValueChanged<bool> onDataReset;
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +65,7 @@ class ProfileView extends StatefulWidget {
 
   /// Present only in dev builds: shows the scenario picker row.
   final FakeBackendSettings? devSettings;
-  final VoidCallback? onDataReset;
+  final ValueChanged<bool>? onDataReset;
   final VoidCallback onSignedOut;
 
   static void _goToLogin() => Modular.to.navigate(Routes.login);
@@ -89,10 +91,13 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   Future<void> _openScenarios(FakeBackendSettings settings) async {
+    final volume = settings.volume;
     final changed = await showScenarioPicker(context, settings);
     if (!mounted) return;
     setState(() {});
-    if (changed) widget.onDataReset?.call();
+    // A new scenario keeps what is saved (so "Sem internet" shows the
+    // offline screens with data); a new volume is another account.
+    if (changed) widget.onDataReset?.call(settings.volume != volume);
   }
 
   Future<void> _signOut() async {

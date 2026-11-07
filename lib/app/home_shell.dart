@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
@@ -16,8 +18,33 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   var _tab = 0;
+
+  /// Which tab came (back) on screen: picked in the bar, or the app
+  /// returned to the foreground on it. Dashboard and statement use it to
+  /// look for news, such as a Pix that just arrived.
+  final _visits = StreamController<int>.broadcast();
+
+  Stream<void> _visitsOf(int tab) => _visits.stream.where((t) => t == tab);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _visits.add(_tab);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _visits.close();
+    super.dispose();
+  }
 
   /// The crypto tab is only built on its first visit, so opening the app
   /// does not spend CoinGecko calls on a screen nobody looked at.
@@ -27,13 +54,17 @@ class _HomeShellState extends State<HomeShell> {
   /// tab is built again, so its cubit loads under the new scenario.
   var _generation = 0;
 
-  void _go(int tab) => setState(() {
-    _tab = tab;
-    _visited.add(tab);
-  });
+  void _go(int tab) {
+    setState(() {
+      _tab = tab;
+      _visited.add(tab);
+    });
+    _visits.add(tab);
+  }
 
-  Future<void> _resetData() async {
-    await Modular.get<LedgerRepository>().clear();
+  Future<void> _resetData(bool clearSaved) async {
+    final ledger = Modular.get<LedgerRepository>()..expireRecentFetches();
+    if (clearSaved) await ledger.clear();
     if (mounted) setState(() => _generation++);
   }
 
@@ -46,8 +77,9 @@ class _HomeShellState extends State<HomeShell> {
         DashboardPage(
           onOpenStatement: () => _go(1),
           onOpenCrypto: () => _go(2),
+          visits: _visitsOf(0),
         ),
-        const StatementPage(),
+        StatementPage(visits: _visitsOf(1)),
         if (_visited.contains(2)) const CryptoPage() else const SizedBox(),
         ProfilePage(onDataReset: _resetData),
       ],
