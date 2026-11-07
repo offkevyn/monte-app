@@ -2,9 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-/// Runs [onVisit] every time [visits] fires: the tab was picked again, or
-/// the app came back to the foreground while it was on screen. Lets a
-/// screen kept alive in an `IndexedStack` look for news.
+/// Why a tab kept alive in an `IndexedStack` came (back) on screen.
+enum Visit {
+  /// Picked in the bottom bar.
+  tab,
+
+  /// The app returned to the foreground while the tab was on screen.
+  resume,
+}
+
+/// Runs [onVisit] every time [visits] fires, so a screen kept alive in an
+/// `IndexedStack` can look for news.
 class OnVisit extends StatefulWidget {
   const OnVisit({
     super.key,
@@ -13,8 +21,8 @@ class OnVisit extends StatefulWidget {
     required this.child,
   });
 
-  final Stream<void>? visits;
-  final void Function(BuildContext context) onVisit;
+  final Stream<Visit>? visits;
+  final void Function(BuildContext context, Visit visit) onVisit;
   final Widget child;
 
   @override
@@ -22,13 +30,13 @@ class OnVisit extends StatefulWidget {
 }
 
 class _OnVisitState extends State<OnVisit> {
-  StreamSubscription<void>? _subscription;
+  StreamSubscription<Visit>? _subscription;
 
   @override
   void initState() {
     super.initState();
-    _subscription = widget.visits?.listen((_) {
-      if (mounted) widget.onVisit(context);
+    _subscription = widget.visits?.listen((visit) {
+      if (mounted) widget.onVisit(context, visit);
     });
   }
 

@@ -47,11 +47,27 @@ final class StatementNextPageRequested extends StatementEvent {
   const StatementNextPageRequested();
 }
 
-/// The tab is on screen again (picked in the bar, or the app came back):
-/// looks for news on the unfiltered list. The repository skips the network
-/// when it fetched seconds ago.
-final class StatementVisited extends StatementEvent {
-  const StatementVisited();
+/// The tab was picked in the bar: the list starts over from the top, with
+/// what is saved first and the server behind it, as when it first opened.
+/// The repository skips the network when it fetched seconds ago.
+final class StatementTabOpened extends StatementEvent {
+  const StatementTabOpened();
+}
+
+/// The app came back to the foreground on this tab: looks for news without
+/// moving the list. When the person is down the list ([atTop] false), the
+/// news wait behind the "new transactions" pill instead of pushing the
+/// rows they are reading.
+final class StatementResumed extends StatementEvent {
+  const StatementResumed({required this.atTop});
+
+  final bool atTop;
+}
+
+/// The pill was tapped, or the person scrolled back to the top: the news
+/// held back go on top of the list.
+final class StatementNewShown extends StatementEvent {
+  const StatementNewShown();
 }
 
 /// Pull to refresh.
@@ -63,10 +79,21 @@ final class StatementRefreshed extends StatementEvent {
 /// and refresh, so they all share one restartable queue: a newer request
 /// always cancels the older one, whichever started it.
 final class _FirstPageRequested extends StatementEvent {
-  const _FirstPageRequested(this.filter, {this.forceRefresh = false});
+  const _FirstPageRequested(
+    this.filter, {
+    this.forceRefresh = false,
+    this.fromTop = false,
+    this.holdNews = false,
+  });
 
   final TransactionFilter filter;
   final bool forceRefresh;
+
+  /// Drop the pages loaded so far and show the saved first page right away.
+  final bool fromTop;
+
+  /// Keep news behind the pill instead of putting them on top.
+  final bool holdNews;
 }
 
 // ----------------------------------------------------------------- state
@@ -85,6 +112,8 @@ final class StatementState extends Equatable {
     this.pageFailure,
     this.freshness,
     this.fromDevice = false,
+    this.limitReached = false,
+    this.newOnTop = 0,
     this.groups = const [],
   }) : items = List.unmodifiable(items),
        filter = filter ?? TransactionFilter.none;
@@ -116,7 +145,15 @@ final class StatementState extends Equatable {
   /// on the device, which may miss transactions.
   final bool fromDevice;
 
-  bool get hasMore => nextCursor != null;
+  /// The list hit [StatementBloc.maxItems]: no more pages, the footer
+  /// suggests the search or the filters to go further back.
+  final bool limitReached;
+
+  /// Transactions that arrived while the person was down the list, waiting
+  /// behind the pill.
+  final int newOnTop;
+
+  bool get hasMore => nextCursor != null && !limitReached;
 
   bool get isEmpty => status == StatementStatus.ready && items.isEmpty;
 
@@ -132,6 +169,8 @@ final class StatementState extends Equatable {
     Failure? Function()? pageFailure,
     DataFreshness? freshness,
     bool? fromDevice,
+    bool? limitReached,
+    int? newOnTop,
   }) => StatementState(
     status: status ?? this.status,
     items: items ?? this.items,
@@ -144,6 +183,8 @@ final class StatementState extends Equatable {
     pageFailure: pageFailure != null ? pageFailure() : this.pageFailure,
     freshness: freshness ?? this.freshness,
     fromDevice: fromDevice ?? this.fromDevice,
+    limitReached: limitReached ?? this.limitReached,
+    newOnTop: newOnTop ?? this.newOnTop,
   );
 
   @override
@@ -158,6 +199,8 @@ final class StatementState extends Equatable {
     pageFailure,
     freshness,
     fromDevice,
+    limitReached,
+    newOnTop,
   ];
 }
 
@@ -172,6 +215,7 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     this._calendar, {
     this.debounce = const Duration(milliseconds: 350),
     this.pageSize = TransactionQuery.defaultLimit,
+    this.maxItems = 200,
   }) : super(StatementState()) {
     on<StatementStarted>((_, _) => _reload(state.filter));
     on<StatementQueryChanged>(
@@ -181,11 +225,17 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     on<StatementFilterChanged>(
       (event, _) => _reload(event.filter.copyWith(query: state.filter.query)),
     );
-    on<StatementVisited>((_, _) {
-      if (state.status == StatementStatus.ready && state.filter.isEmpty) {
-        _reload(state.filter);
+    on<StatementTabOpened>((_, _) {
+      if (state.status case StatementStatus.ready || StatementStatus.failure) {
+        add(_FirstPageRequested(state.filter, fromTop: true));
       }
     });
+    on<StatementResumed>((event, _) {
+      if (state.status == StatementStatus.ready) {
+        add(_FirstPageRequested(state.filter, holdNews: !event.atTop));
+      }
+    });
+    on<StatementNewShown>(_onNewShown);
     on<StatementRefreshed>((_, _) => _reload(state.filter, forceRefresh: true));
     on<_FirstPageRequested>(_onFirstPage, transformer: restartable());
     on<StatementNextPageRequested>(_onNextPage, transformer: droppable());
@@ -198,6 +248,14 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
   CancelSignal? _firstPageCancel;
   final Duration debounce;
   final int pageSize;
+
+  /// The most rows the list holds. Past it, the search and the filters are
+  /// the way to older transactions: no endless scroll through years of
+  /// history, and memory stays in line with what the device keeps.
+  final int maxItems;
+
+  /// A fresh first page held back while the person reads down the list.
+  TransactionPage? _heldNews;
 
   static EventTransformer<E> _debounceRestartable<E>(Duration duration) =>
       (events, mapper) => events.debounce(duration).switchMap(mapper);
@@ -223,14 +281,22 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
   ) async {
     _firstPageCancel?.cancel();
     final cancel = _firstPageCancel = CancelSignal();
+    if (!event.holdNews) _heldNews = null;
+    // Decided before the state takes the new filter below.
+    final sameList =
+        state.status == StatementStatus.ready &&
+        state.filter == event.filter &&
+        !state.fromDevice;
 
-    var hasList = state.status == StatementStatus.ready;
+    var hasList = state.status == StatementStatus.ready && !event.fromTop;
     if (!hasList) {
       // Show what is saved right away; the server answer replaces it.
       final saved = await _getPage.saved(event.filter);
       if (saved case Ok(value: final page?) when page.items.isNotEmpty) {
         hasList = true;
         emit(_withPage(state, page, filter: event.filter));
+      } else if (event.fromTop) {
+        hasList = state.status == StatementStatus.ready;
       }
     }
     emit(
@@ -250,8 +316,26 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     // `restartable` cancels this handler when a newer request arrives; any
     // emit after that point is ignored, so stale results never show.
     switch (result) {
+      case Ok(value: final page) when event.holdNews:
+        final news = _countNews(page);
+        _heldNews = news == 0 ? null : page;
+        emit(state.copyWith(reloading: false, newOnTop: news));
+      case Ok(value: final page) when event.fromTop:
+        emit(
+          _withPage(
+            state,
+            page,
+            filter: event.filter,
+          ).copyWith(reloading: false),
+        );
       case Ok(value: final page):
-        emit(_merge(page, event.filter).copyWith(reloading: false));
+        emit(
+          _merge(
+            page,
+            event.filter,
+            sameList: sameList,
+          ).copyWith(reloading: false),
+        );
       case Err(failure: CancelledFailure()):
         emit(state.copyWith(reloading: false));
       case Err(:final failure):
@@ -265,17 +349,37 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     }
   }
 
+  /// Rows of a fresh first page that are not in the list yet.
+  int _countNews(TransactionPage page) {
+    final shown = {for (final t in state.items) t.id};
+    return page.items.where((t) => !shown.contains(t.id)).length;
+  }
+
+  void _onNewShown(StatementNewShown event, Emitter<StatementState> emit) {
+    final held = _heldNews;
+    _heldNews = null;
+    if (held == null) {
+      if (state.newOnTop != 0) emit(state.copyWith(newOnTop: 0));
+      return;
+    }
+    emit(_merge(held, state.filter, sameList: !state.fromDevice));
+  }
+
   /// A fresh first page on top of the list already on screen. When its last
   /// item is in the list, the pages below are kept (the person may have
   /// scrolled down); otherwise too much changed and the list starts over.
-  StatementState _merge(TransactionPage page, TransactionFilter filter) {
+  StatementState _merge(
+    TransactionPage page,
+    TransactionFilter filter, {
+    required bool sameList,
+  }) {
     final current = state.items;
-    final sameList = state.filter == filter && !state.fromDevice;
     if (sameList && page.items.isNotEmpty && page.nextCursor != null) {
       final lastId = page.items.last.id;
       final at = current.indexWhere((t) => t.id == lastId);
       if (at != -1 && at < current.length - 1) {
-        final items = [...page.items, ...current.skip(at + 1)];
+        final merged = [...page.items, ...current.skip(at + 1)];
+        final items = merged.take(maxItems).toList();
         return state.copyWith(
           status: StatementStatus.ready,
           items: items,
@@ -283,6 +387,10 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
           freshness: page.freshness,
           fromDevice: page.fromDevice,
           failure: () => null,
+          limitReached:
+              merged.length > maxItems ||
+              (items.length == maxItems && state.nextCursor != null),
+          newOnTop: 0,
         );
       }
     }
@@ -302,6 +410,8 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     freshness: page.freshness,
     fromDevice: page.fromDevice,
     failure: () => null,
+    limitReached: false,
+    newOnTop: 0,
   );
 
   @override
@@ -316,6 +426,7 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
   ) async {
     final cursor = state.nextCursor;
     if (cursor == null ||
+        state.limitReached ||
         state.status != StatementStatus.ready ||
         state.reloading) {
       return;
@@ -330,7 +441,8 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     if (state.filter != filter || state.nextCursor != cursor) return;
     switch (result) {
       case Ok(value: final page):
-        final items = [...state.items, ...page.items];
+        final joined = [...state.items, ...page.items];
+        final items = joined.take(maxItems).toList();
         emit(
           state.copyWith(
             items: items,
@@ -339,6 +451,9 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
             freshness: page.freshness,
             fromDevice: state.fromDevice || page.fromDevice,
             loadingMore: false,
+            limitReached:
+                joined.length > maxItems ||
+                (items.length == maxItems && page.nextCursor != null),
           ),
         );
       case Err(:final failure):

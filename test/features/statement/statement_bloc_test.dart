@@ -351,7 +351,7 @@ void main() {
     await settle();
 
     // A Pix arrived: the fresh first page ends at "d", already on screen.
-    bloc.add(const StatementVisited());
+    bloc.add(const StatementResumed(atTop: true));
     await settle();
     repository.answer(2, Ok(page(['pix', 'c', 'd'], next: 'cursor-d')));
     await settle();
@@ -373,20 +373,128 @@ void main() {
     expect(bloc.state.fromDevice, isTrue);
   });
 
-  test('coming back to the tab only reloads the unfiltered list', () async {
+  test('a search never keeps rows of the list it replaced', () async {
+    await startWith(page(['a', 'b', 'c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementQueryChanged('pix'));
+    await settle(60);
+    // The search page ends at "b", which is also in the old list.
+    repository.answer(1, Ok(page(['b'], next: 'cursor-b')));
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['b']);
+    expect(bloc.state.nextCursor, 'cursor-b');
+  });
+
+  test('picking the tab again starts over from the top', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementNextPageRequested());
+    await settle();
+    repository.answer(1, Ok(page(['e', 'f'], next: 'cursor-f', day: 4)));
+    await settle();
+
+    repository.saved = page(['c', 'd'], next: 'cursor-d');
+    bloc.add(const StatementTabOpened());
+    await settle();
+    // What is saved, at once, with the thin bar while the server answers.
+    expect(bloc.state.items.map((t) => t.id), ['c', 'd']);
+    expect(bloc.state.reloading, isTrue);
+
+    repository.answer(2, Ok(page(['pix', 'c'], next: 'cursor-c')));
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['pix', 'c']);
+    expect(bloc.state.nextCursor, 'cursor-c');
+    expect(bloc.state.reloading, isFalse);
+  });
+
+  test('picking the tab again keeps the filter', () async {
     await startWith(page(['a']));
-    bloc.add(StatementFilterChanged(TransactionFilter.none));
+    final income = TransactionFilter(types: const {TransactionType.income});
+    bloc.add(StatementFilterChanged(income));
     await settle();
-    bloc.add(
-      StatementFilterChanged(
-        TransactionFilter(types: const {TransactionType.income}),
-      ),
-    );
+    repository.answer(1, Ok(page(['a'])));
     await settle();
-    final before = repository.requests.length;
-    bloc.add(const StatementVisited());
+
+    bloc.add(const StatementTabOpened());
     await settle();
-    expect(repository.requests, hasLength(before));
+    expect(repository.requests.last.filter, income);
+  });
+
+  test('news while down the list wait behind the pill', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementResumed(atTop: false));
+    await settle();
+    repository.answer(1, Ok(page(['p1', 'p2', 'c', 'd'], next: 'cursor-d')));
+    await settle();
+    // The rows being read do not move.
+    expect(bloc.state.items.map((t) => t.id), ['c', 'd']);
+    expect(bloc.state.newOnTop, 2);
+
+    bloc.add(const StatementNewShown());
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['p1', 'p2', 'c', 'd']);
+    expect(bloc.state.newOnTop, 0);
+  });
+
+  test('coming back with nothing new shows no pill', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementResumed(atTop: false));
+    await settle();
+    repository.answer(1, Ok(page(['c', 'd'], next: 'cursor-d')));
+    await settle();
+    expect(bloc.state.newOnTop, 0);
+    expect(bloc.state.items.map((t) => t.id), ['c', 'd']);
+  });
+
+  group('limit', () {
+    late StatementBloc small;
+
+    setUp(() {
+      small = StatementBloc(
+        GetStatementPage(repository),
+        FixedOffsetCalendar.brasilia,
+        pageSize: 2,
+        maxItems: 4,
+      );
+    });
+
+    tearDown(() => small.close());
+
+    Future<void> scrollTo(List<String> first, List<String> second) async {
+      small.add(const StatementStarted());
+      await settle();
+      repository.answer(0, Ok(page(first, next: 'cursor-1')));
+      await settle();
+      small.add(const StatementNextPageRequested());
+      await settle();
+      repository.answer(1, Ok(page(second, next: 'cursor-2', day: 4)));
+      await settle();
+    }
+
+    test('the list stops at the limit and asks for the filters', () async {
+      await scrollTo(['a', 'b'], ['c', 'd']);
+      expect(small.state.items, hasLength(4));
+      expect(small.state.limitReached, isTrue);
+      expect(small.state.hasMore, isFalse);
+
+      small.add(const StatementNextPageRequested());
+      await settle();
+      expect(repository.requests, hasLength(2), reason: 'no third page');
+    });
+
+    test('a page crossing the limit is cut at it', () async {
+      await scrollTo(['a', 'b', 'c'], ['d', 'e', 'f']);
+      expect(small.state.items.map((t) => t.id), ['a', 'b', 'c', 'd']);
+      expect(small.state.limitReached, isTrue);
+    });
+
+    test('a new search starts below the limit again', () async {
+      await scrollTo(['a', 'b'], ['c', 'd']);
+      small.add(const StatementQueryChanged('pix'));
+      await settle(400);
+      repository.answer(2, Ok(page(['a'], next: 'cursor-a')));
+      await settle();
+      expect(small.state.limitReached, isFalse);
+      expect(small.state.hasMore, isTrue);
+    });
   });
 
   test('closes cleanly after searches (no leaked subscriptions)', () async {

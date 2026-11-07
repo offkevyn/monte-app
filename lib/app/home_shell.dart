@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
+import '../core/ui/on_visit.dart';
 import '../features/crypto/presentation/list/crypto_page.dart';
 import '../features/dashboard/presentation/dashboard_page.dart';
 import '../features/ledger/domain/repositories/ledger_repository.dart';
@@ -24,9 +25,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// Which tab came (back) on screen: picked in the bar, or the app
   /// returned to the foreground on it. Dashboard and statement use it to
   /// look for news, such as a Pix that just arrived.
-  final _visits = StreamController<int>.broadcast();
+  final _visits = StreamController<(int, Visit)>.broadcast();
 
-  Stream<void> _visitsOf(int tab) => _visits.stream.where((t) => t == tab);
+  Stream<Visit> _visitsOf(int tab) =>
+      _visits.stream.where((visit) => visit.$1 == tab).map((visit) => visit.$2);
 
   @override
   void initState() {
@@ -36,7 +38,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _visits.add(_tab);
+    if (state == AppLifecycleState.resumed) _visits.add((_tab, Visit.resume));
   }
 
   @override
@@ -59,7 +61,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       _tab = tab;
       _visited.add(tab);
     });
-    _visits.add(tab);
+    _visits.add((tab, Visit.tab));
   }
 
   Future<void> _resetData(bool clearSaved) async {

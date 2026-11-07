@@ -38,14 +38,14 @@ class DashboardPage extends StatelessWidget {
   final VoidCallback onOpenCrypto;
 
   /// Fires when this tab is on screen again (see `OnVisit`).
-  final Stream<void>? visits;
+  final Stream<Visit>? visits;
 
   @override
   Widget build(BuildContext context) => BlocProvider(
     create: (_) => Modular.get<DashboardCubit>()..load(),
     child: OnVisit(
       visits: visits,
-      onVisit: (context) => context.read<DashboardCubit>().refreshIfNeeded(),
+      onVisit: (context, _) => context.read<DashboardCubit>().refreshIfNeeded(),
       child: DashboardView(
         customerName: Modular.get<CurrentSession>().value?.customerName ?? '',
         money: Modular.get<MoneyFormatter>(),
