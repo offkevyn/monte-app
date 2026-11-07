@@ -64,17 +64,50 @@ void main() {
     }
   }
 
-  test('account answers the generated opening balance', () async {
+  test('account answers the settled balance, computed by the server', () async {
     final account = await source.fetchAccount();
     expect(account.currency, 'BRL');
-    expect(account.openingBalanceCents, server.data.openingBalance.cents);
+    final settled = server.data.transactions
+        .where((t) => t.status == TransactionStatus.completed)
+        .fold(server.data.openingBalance, (sum, t) => sum + t.signedAmount);
+    expect(account.balanceCents, settled.cents);
+    expect(account.asOf, DateTime.utc(2026, 11, 6, 2, 30));
+  });
+
+  test(
+    'the list sends summaries and the total; the detail sends all',
+    () async {
+      final page = await source.fetchTransactions(TransactionQuery(limit: 5));
+      expect(page.total, server.data.transactions.length);
+      for (final item in page.items) {
+        expect(item.cardLast4, isNull);
+        expect(item.message, isNull);
+      }
+      final summary = TransactionMapper.toEntities(page).items.first;
+      expect(summary.detailed, isFalse);
+
+      final withCard = server.data.transactions.firstWhere(
+        (t) => t.cardLastDigits != null,
+      );
+      final detail = TransactionMapper.toEntity(
+        await source.fetchTransaction(withCard.id),
+      );
+      expect(detail.detailed, isTrue);
+      expect(detail.cardLastDigits, withCard.cardLastDigits);
+    },
+  );
+
+  test('a bulk page brings up to 500 of a filter', () async {
+    final page = await source.fetchBulkPage(TransactionFilter.none);
+    expect(page.items, hasLength(server.data.transactions.length));
+    expect(page.nextCursor, isNull);
   });
 
   test(
     'paging through everything returns each transaction once, in order',
     () async {
       final all = await readAll(TransactionFilter.none);
-      expect(all, server.data.transactions);
+      expect(all.map((t) => t.id), server.data.transactions.map((t) => t.id));
       expect(all.map((t) => t.id).toSet(), hasLength(all.length));
     },
   );
@@ -102,7 +135,11 @@ void main() {
       final expected = server.data.transactions
           .where((t) => filter.matches(t, calendar))
           .toList();
-      expect(await readAll(filter), expected, reason: '$filter');
+      expect(
+        (await readAll(filter)).map((t) => t.id),
+        expected.map((t) => t.id),
+        reason: '$filter',
+      );
     }
   });
 
@@ -126,7 +163,7 @@ void main() {
     test('empty: no transactions and zero balance', () async {
       settings.scenario = FakeScenario.empty;
       expect(await readAll(TransactionFilter.none), isEmpty);
-      expect((await source.fetchAccount()).openingBalanceCents, 0);
+      expect((await source.fetchAccount()).balanceCents, 0);
       final detail = await guardRequest(
         () => source.fetchTransaction(server.data.transactions.first.id),
       );

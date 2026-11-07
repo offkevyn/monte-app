@@ -154,24 +154,24 @@ void main() {
   });
 
   group('account', () {
-    test('reads the opening balance in reais', () {
+    test('reads the settled balance in reais', () {
       final dto = AccountDto.fromJson({
-        'opening_balance_cents': 150000,
+        'balance_cents': 150000,
         'currency': 'BRL',
+        'as_of': '2026-11-06T13:00:00Z',
       });
-      expect(TransactionMapper.openingBalance(dto), const Money.cents(150000));
+      expect(TransactionMapper.balance(dto), const Money.cents(150000));
+      expect(dto.asOf, DateTime.utc(2026, 11, 6, 13));
       expect(dto.toJson()['currency'], 'BRL');
     });
 
     test('rejects another currency instead of showing the wrong symbol', () {
       final dto = AccountDto.fromJson({
-        'opening_balance_cents': 100,
+        'balance_cents': 100,
         'currency': 'USD',
+        'as_of': '2026-11-06T13:00:00Z',
       });
-      expect(
-        () => TransactionMapper.openingBalance(dto),
-        throwsFormatException,
-      );
+      expect(() => TransactionMapper.balance(dto), throwsFormatException);
     });
   });
 }

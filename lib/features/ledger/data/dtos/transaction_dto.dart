@@ -64,24 +64,32 @@ final class TransactionDto {
   };
 }
 
-/// Account data needed to compute the balance.
+/// `GET /v1/account`: the settled balance, computed by the server.
 final class AccountDto {
-  const AccountDto({required this.openingBalanceCents, required this.currency});
+  const AccountDto({
+    required this.balanceCents,
+    required this.currency,
+    required this.asOf,
+  });
 
   factory AccountDto.fromJson(Object? source) {
     final json = JsonReader.of(source, 'account');
     return AccountDto(
-      openingBalanceCents: json.integer('opening_balance_cents'),
+      balanceCents: json.integer('balance_cents'),
       currency: json.string('currency'),
+      asOf: json.instant('as_of'),
     );
   }
 
-  final int openingBalanceCents;
+  /// Opening balance plus every completed movement, as of [asOf].
+  final int balanceCents;
   final String currency;
+  final DateTime asOf;
 
   Map<String, Object?> toJson() => {
-    'opening_balance_cents': openingBalanceCents,
+    'balance_cents': balanceCents,
     'currency': currency,
+    'as_of': asOf.toUtc().toIso8601String(),
   };
 }
 
@@ -95,6 +103,7 @@ final class TransactionPageDto {
     required this.items,
     required this.skippedItems,
     required this.nextCursor,
+    this.total,
   });
 
   factory TransactionPageDto.fromJson(Object? source) {
@@ -112,10 +121,14 @@ final class TransactionPageDto {
       items: items,
       skippedItems: skipped,
       nextCursor: json.optionalString('next_cursor'),
+      total: json.optionalInteger('total'),
     );
   }
 
   final List<TransactionDto> items;
   final int skippedItems;
   final String? nextCursor;
+
+  /// How many transactions match the filter on the server, across pages.
+  final int? total;
 }
