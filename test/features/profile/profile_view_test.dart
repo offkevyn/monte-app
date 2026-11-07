@@ -68,6 +68,9 @@ void main() {
 
   tearDown(() => cubit.close());
 
+  var pixes = 0;
+  setUp(() => pixes = 0);
+
   Future<void> pump(WidgetTester tester, {FakeBackendSettings? dev}) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.6;
@@ -85,6 +88,7 @@ void main() {
               theme: theme,
               links: links,
               devSettings: dev,
+              onSimulatePix: () => pixes++,
               onDataReset: (clear) {
                 dataResets++;
                 clears.add(clear);
@@ -110,6 +114,18 @@ void main() {
     expect(find.text('Conta 0001 · 12345-6'), findsOneWidget);
     expect(find.text('1.0.0'), findsOneWidget);
     expect(find.byKey(const Key('profile.devScenarios')), findsNothing);
+    expect(find.byKey(const Key('profile.devPix')), findsNothing);
+  });
+
+  testWidgets('dev builds can make a Pix arrive', (tester) async {
+    await pump(tester, dev: FakeBackendSettings());
+    await tester.tap(find.byKey(const Key('profile.devPix')));
+    await tester.pump();
+    expect(pixes, 1);
+    expect(
+      find.textContaining('Pix de R\$ 50,00 chega em 10 s'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the switches follow the cubit', (tester) async {
