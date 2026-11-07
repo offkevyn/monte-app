@@ -78,7 +78,15 @@ void main() {
 
     // Profile: sign out asks first, then back to the login.
     await tester.tap(find.text('Perfil').last);
-    await tapWhenReady(tester, find.byKey(const Key('home.signOut')));
+    await tester.pump(const Duration(milliseconds: 300));
+    // On a short screen the button is below the fold of the profile list.
+    final signOut = find.byKey(const Key('home.signOut'));
+    await tester.scrollUntilVisible(
+      signOut,
+      200,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tapWhenReady(tester, signOut);
     await tapWhenReady(tester, find.byKey(const Key('profile.confirmSignOut')));
     await waitFor(tester, find.byKey(const Key('login.submit')));
   });
