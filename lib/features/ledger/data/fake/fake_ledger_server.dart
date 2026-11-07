@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../../../core/money/money.dart';
 import '../../../../core/network/fake/fake_http_adapter.dart';
 import '../../../../core/network/fake/fake_scenario.dart';
 import '../../../../core/text/search_text.dart';
@@ -31,6 +32,32 @@ final class FakeLedgerServer {
     count: settings.volume.transactionCount,
     nowUtc: _clock.nowUtc(),
   );
+
+  /// Dev tool: a Pix lands on the account right now, as if someone sent
+  /// it. The app sees it the next time it asks (tab, pull, coming back).
+  Transaction receivePix({
+    int cents = 5000,
+    String from = 'Ana Beatriz Souza',
+  }) {
+    final now = _clock.nowUtc();
+    final pix = Transaction(
+      id: 'tx_pix_${now.microsecondsSinceEpoch}',
+      description: 'Pix recebido',
+      amount: Money.cents(cents),
+      type: TransactionType.income,
+      status: TransactionStatus.completed,
+      occurredAt: now,
+      method: PaymentMethod.pix,
+      category: TransactionCategory.transfer,
+      counterparty: from,
+    );
+    final current = data;
+    _data = FakeLedgerData(
+      openingBalance: current.openingBalance,
+      transactions: [pix, ...current.transactions],
+    );
+    return pix;
+  }
 
   List<FakeRoute> get routes => [
     FakeRoute('GET', '/v1/account', _account),

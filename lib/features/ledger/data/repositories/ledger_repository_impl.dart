@@ -20,13 +20,16 @@ import '../dtos/transaction_dto.dart';
 import '../local/ledger_local_datasource.dart';
 import '../mappers/transaction_mapper.dart';
 
-/// The server is the source of the data; the encrypted local database is
-/// what the screens read and what is left when the network is not.
+/// The server owns the data; the encrypted local database is the only
+/// thing the screens read. Fetching from the server just fills it.
 ///
 /// - Each screen asks the server only for what it shows: a page of 20, the
 ///   dashboard period, one transaction's details.
-/// - Every answer is saved before it is returned, and the cache is pruned
-///   (see [LedgerLocalDataSource.prune]).
+/// - Every answer is saved, the cache is pruned (see
+///   [LedgerLocalDataSource.prune]) and what goes back to the screen is
+///   read from the database, never the server answer itself. So the screen
+///   and the device always agree: a detail opened earlier keeps its card
+///   and message when the list refreshes over it.
 /// - When the server fails, the saved copy is returned marked as stale.
 ///   Only a cancelled request, a rejected session and "nothing saved at
 ///   all" reach the screen as errors.
@@ -98,22 +101,10 @@ final class LedgerRepositoryImpl implements LedgerRepository {
             skippedRecords: value.skipped,
           );
           await _local.prune();
+          return await _readDashboard(period) ?? (throw _notStored);
         });
-        if (saved case Err(:final failure)) return Err(failure);
-        _fetchedAt[key] = now;
-        return Ok(
-          DashboardSnapshot(
-            settledBalance: value.balance,
-            pendingDebits: value.pending,
-            recent: value.recent,
-            period: period,
-            periodTransactions: value.inPeriod,
-            freshness: DataFreshness(
-              syncedAt: now,
-              skippedRecords: value.skipped,
-            ),
-          ),
-        );
+        if (saved case Ok()) _fetchedAt[key] = now;
+        return saved;
     }
   }
 
@@ -247,7 +238,7 @@ final class LedgerRepositoryImpl implements LedgerRepository {
   }) async {
     final firstUnfiltered = query.cursor == null && query.filter.isEmpty;
     if (firstUnfiltered && !force && _recentlyFetched(_firstPageKey)) {
-      return _guardLocal(() => _devicePage(query));
+      return _guardLocal(() => _devicePage(query, online: true));
     }
 
     final fetched = await guardRequest(
@@ -264,7 +255,7 @@ final class LedgerRepositoryImpl implements LedgerRepository {
       case Ok(:final value):
         final mapped = TransactionMapper.toEntities(value);
         final now = _clock.nowUtc();
-        final saved = await _guardLocal(() async {
+        final stored = await _guardLocal(() async {
           await _local.saveSummaries(mapped.items);
           if (firstUnfiltered) {
             await _local.markStatementSynced(
@@ -273,29 +264,47 @@ final class LedgerRepositoryImpl implements LedgerRepository {
             );
             await _local.prune();
           }
+          // The rows just saved, in the server's order. The next page still
+          // follows the server cursor: the device may not have it yet.
+          return _local.byIds([for (final t in mapped.items) t.id]);
         });
-        if (saved case Err(:final failure)) return Err(failure);
-        if (firstUnfiltered) _fetchedAt[_firstPageKey] = now;
-        return Ok(
-          TransactionPage(
-            items: mapped.items,
-            nextCursor: value.nextCursor,
-            freshness: DataFreshness(
-              syncedAt: now,
-              skippedRecords: mapped.skipped,
-            ),
-          ),
-        );
+        switch (stored) {
+          case Err(:final failure):
+            return Err(failure);
+          case Ok(value: final items):
+            if (firstUnfiltered) _fetchedAt[_firstPageKey] = now;
+            return Ok(
+              TransactionPage(
+                items: items,
+                nextCursor: value.nextCursor,
+                freshness: DataFreshness(
+                  syncedAt: now,
+                  skippedRecords: mapped.skipped,
+                ),
+              ),
+            );
+        }
     }
   }
 
   /// A page read from the device. With a [failure] (the server could not
   /// answer), it is marked stale and as coming from the device.
+  ///
+  /// [online]: the server is reachable and was asked seconds ago. The
+  /// device may hold only this page, so where the list ends is the
+  /// server's call: the next page always goes to it.
   Future<TransactionPage> _devicePage(
     TransactionQuery query, {
     Failure? failure,
+    bool online = false,
   }) async {
-    final page = await _local.page(query);
+    final saved = await _local.page(query);
+    final page = online && saved.nextCursor == null && saved.items.isNotEmpty
+        ? (
+            items: saved.items,
+            nextCursor: LedgerLocalDataSource.encodeCursor(saved.items.last),
+          )
+        : saved;
     final mark = await _local.readStatementState();
     final dashboard = await _local.readDashboardState();
     final synced = [?mark?.syncedAt, ?dashboard?.syncedAt]..sort();
@@ -346,11 +355,10 @@ final class LedgerRepositoryImpl implements LedgerRepository {
       case Err(:final failure):
         return Err(failure);
       case Ok(value: final transaction):
-        final saved = await _guardLocal(
-          () => _local.saveDetail(transaction, openedAt: _clock.nowUtc()),
-        );
-        if (saved case Err(:final failure)) return Err(failure);
-        return Ok(transaction);
+        return _guardLocal(() async {
+          await _local.saveDetail(transaction, openedAt: _clock.nowUtc());
+          return await _local.byId(transaction.id) ?? (throw _notStored);
+        });
     }
   }
 
@@ -364,6 +372,9 @@ final class LedgerRepositoryImpl implements LedgerRepository {
   }
 
   // ---- helpers ----
+
+  /// What was just saved could not be read back.
+  static const _notStored = StorageFailure('saved rows not found');
 
   bool _recentlyFetched(String key) {
     final at = _fetchedAt[key];

@@ -212,6 +212,34 @@ void main() {
       expect(await local.byId(second.items.last.id), isNotNull);
     });
 
+    test('the screen gets what the device has, not the raw answer', () async {
+      final first = (await repository.getPage(TransactionQuery())).valueOrNull!;
+      final opened = server.data.transactions
+          .take(20)
+          .firstWhere((t) => t.cardLastDigits != null);
+      await repository.refreshTransaction(opened.id);
+
+      // The list refreshes over a detail opened before: the summary from the
+      // server does not wipe the card and the message saved on the device.
+      final again = (await repository.getPage(
+        TransactionQuery(),
+        force: true,
+      )).valueOrNull!;
+      final row = again.items.firstWhere((t) => t.id == opened.id);
+      expect(row.detailed, isTrue);
+      expect(row.cardLastDigits, opened.cardLastDigits);
+      expect(again.items.map((t) => t.id), first.items.map((t) => t.id));
+    });
+
+    test('the dashboard after a refresh is the copy just saved', () async {
+      final fresh = (await repository.refreshDashboard(thisMonth)).valueOrNull!;
+      final saved = (await repository.savedDashboard(thisMonth)).valueOrNull!;
+      expect(fresh.settledBalance, saved.settledBalance);
+      expect(fresh.recent, saved.recent);
+      expect(fresh.pendingDebits, saved.pendingDebits);
+      expect(fresh.periodTransactions, saved.periodTransactions);
+    });
+
     test('filters and search are done by the server', () async {
       final filter = TransactionFilter(query: 'padaria');
       final page = (await repository.getPage(TransactionQuery(filter: filter)))
@@ -265,6 +293,24 @@ void main() {
       expect(remote.queries, hasLength(before));
       await repository.getPage(TransactionQuery(), force: true);
       expect(remote.queries, hasLength(before + 1));
+    });
+
+    test('the device answering seconds later does not end the list', () async {
+      // Right after login only the first page is saved: the device does not
+      // know if more exist, so the list must keep asking the server.
+      await repository.getPage(TransactionQuery());
+      clock.advance(const Duration(seconds: 5));
+      var page = (await repository.getPage(TransactionQuery())).valueOrNull!;
+      expect(page.nextCursor, isNotNull);
+
+      var total = page.items.length;
+      while (page.nextCursor != null) {
+        page = (await repository.getPage(
+          TransactionQuery().nextPage(page.nextCursor!),
+        )).valueOrNull!;
+        total += page.items.length;
+      }
+      expect(total, server.data.transactions.length);
     });
 
     test('a cancelled request is reported as cancelled', () async {
@@ -344,6 +390,23 @@ void main() {
         const NotFoundFailure(),
       );
     });
+  });
+
+  test('a Pix arriving at the fake bank shows on the next look', () async {
+    await repository.refreshDashboard(thisMonth);
+    final before = settledOnServer();
+    final pix = server.receivePix();
+
+    final page = (await repository.getPage(
+      TransactionQuery(),
+      force: true,
+    )).valueOrNull!;
+    expect(page.items.first.id, pix.id);
+    final snapshot = (await repository.refreshDashboard(
+      thisMonth,
+      force: true,
+    )).valueOrNull!;
+    expect(snapshot.settledBalance, before + const Money.cents(5000));
   });
 
   test('expiring recent fetches makes the next refresh ask again', () async {
