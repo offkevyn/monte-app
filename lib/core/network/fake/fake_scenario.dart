@@ -29,6 +29,8 @@ enum FakeScenario {
 
 /// How many transactions the simulated account has.
 enum FakeVolume {
+  /// A brand new account: a few movements, to see short lists.
+  tiny(3),
   small(50),
   medium(500),
   large(10000);
