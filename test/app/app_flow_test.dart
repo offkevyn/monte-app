@@ -93,7 +93,18 @@ void main() {
 
       await tester.tap(find.text('Perfil'));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.tap(find.byKey(const Key('home.signOut')));
+      final signOut = find.byKey(const Key('home.signOut'));
+      await tester.scrollUntilVisible(
+        signOut,
+        200,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tester.tap(signOut);
+      await pumpUntilFound(
+        tester,
+        find.byKey(const Key('profile.confirmSignOut')),
+      );
+      await tester.tap(find.byKey(const Key('profile.confirmSignOut')));
       await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
     },
   );

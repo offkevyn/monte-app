@@ -34,6 +34,9 @@ dependencies:
   bloc_concurrency: ^0.3.0
   stream_transform: ^2.1.2
   bloc: ^9.2.1
+  lottie: ^3.8.2
+  package_info_plus: ^10.2.2
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
@@ -51,6 +54,7 @@ flutter:
 
   assets:
     - assets/fonts/OFL.txt
+    - assets/lottie/
 
   fonts:
     - family: PlusJakartaSans

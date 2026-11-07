@@ -2,6 +2,8 @@ import 'package:flutter_modular/flutter_modular.dart';
 
 import 'money/money_formatter.dart';
 import 'network/fake/fake_scenario.dart';
+import 'platform/app_info.dart';
+import 'platform/link_opener.dart';
 import 'security/biometric_authenticator.dart';
 import 'storage/app_preferences.dart';
 import 'storage/encrypted_database.dart';
@@ -33,6 +35,8 @@ class CoreModule extends Module {
         () => DatabaseKeyProvider(Modular.get<SecureStore>()),
       )
       ..addSingleton<FakeBackendSettings>(() => FakeBackendSettings())
+      ..addSingleton<AppInfo>(() => const PackageAppInfo())
+      ..addSingleton<LinkOpener>(() => const ExternalLinkOpener())
       ..addSingleton<DateLabels>(
         () => DateLabels(Modular.get<Clock>(), Modular.get<LocalCalendar>()),
       )

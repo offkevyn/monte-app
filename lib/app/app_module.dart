@@ -6,6 +6,7 @@ import '../core/network/api_client_factory.dart';
 import '../core/network/bank_api.dart';
 import '../core/network/fake/fake_http_adapter.dart';
 import '../core/network/fake/fake_scenario.dart';
+import '../core/platform/app_info.dart';
 import '../core/security/biometric_authenticator.dart';
 import '../core/storage/app_preferences.dart';
 import '../core/storage/encrypted_database.dart';
@@ -44,6 +45,7 @@ import '../features/ledger/data/repositories/ledger_repository_impl.dart';
 import '../features/ledger/domain/repositories/ledger_repository.dart';
 import '../features/ledger/domain/usecases/get_dashboard.dart';
 import '../features/ledger/domain/usecases/get_statement_page.dart';
+import '../features/profile/presentation/profile_cubit.dart';
 import '../features/statement/presentation/bloc/statement_bloc.dart';
 import '../features/statement/statement_module.dart';
 import 'home_shell.dart';
@@ -211,6 +213,17 @@ class AppModule extends Module {
           Modular.get<AppPreferences>(),
           Modular.get<BiometricAuthenticator>(),
           Modular.get<CurrentSession>(),
+        ),
+      )
+      ..add<ProfileCubit>(
+        () => ProfileCubit(
+          preferences: Modular.get<AppPreferences>(),
+          biometrics: Modular.get<BiometricAuthenticator>(),
+          appInfo: Modular.get<AppInfo>(),
+          signOut: Modular.get<SignOut>(),
+          ledger: Modular.get<LedgerRepository>(),
+          market: Modular.get<MarketRepository>(),
+          session: Modular.get<CurrentSession>(),
         ),
       );
   }

@@ -157,4 +157,29 @@ void main() {
       expect(format('00000000191').selection.baseOffset, 14);
     });
   });
+
+  testWidgets('long-pressing the logo opens the dev tools when present', (
+    tester,
+  ) async {
+    var opened = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: MonteTheme.light,
+        home: BlocProvider.value(
+          value: cubit,
+          child: LoginView(onOpenDevTools: (_) => opened++),
+        ),
+      ),
+    );
+    await tester.longPress(find.byKey(const Key('login.logo')));
+    expect(opened, 1);
+  });
+
+  testWidgets('without dev tools the logo is just an image', (tester) async {
+    await pump(tester);
+    final logo = tester.widget<GestureDetector>(
+      find.byKey(const Key('login.logo')),
+    );
+    expect(logo.onLongPress, isNull);
+  });
 }
