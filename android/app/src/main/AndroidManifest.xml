@@ -2,7 +2,7 @@
     <!-- Fingerprint / face unlock (local_auth). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <application
-        android:label="Monte"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:allowBackup="false"
         android:fullBackupContent="false"
