@@ -8,9 +8,13 @@ import '../../domain/entities/transaction.dart';
 import '../mappers/transaction_mapper.dart';
 import 'fake_ledger_generator.dart';
 
-/// Server side of the simulated bank: `/v1/account` and
-/// `/v1/transactions`. Filters and pages like a real API would, validating
-/// its own input and answering 400 to bad parameters.
+/// Server side of the simulated bank: `/v1/account`, `/v1/transactions`
+/// and `/v1/transactions/:id`. Filters and pages like a real API would,
+/// validating its own input and answering 400 to bad parameters.
+///
+/// The list sends a summary of each transaction (what a row of the
+/// statement shows) and the total of matches; the full record comes from
+/// the detail endpoint, so each screen downloads only what it uses.
 final class FakeLedgerServer {
   FakeLedgerServer({required this.settings, required this._clock}) {
     settings.addDataListener(() => _data = null);
@@ -36,10 +40,24 @@ final class FakeLedgerServer {
 
   bool get _isEmpty => settings.scenario == FakeScenario.empty;
 
-  FakeResponse _account(FakeRequest request) => FakeResponse(200, {
-    'opening_balance_cents': _isEmpty ? 0 : data.openingBalance.cents,
-    'currency': 'BRL',
-  });
+  /// The balance is the server's job: opening balance plus every settled
+  /// movement. Pending debits are left to the app, which shows them as
+  /// reserved.
+  FakeResponse _account(FakeRequest request) {
+    var balance = _isEmpty ? 0 : data.openingBalance.cents;
+    if (!_isEmpty) {
+      for (final t in data.transactions) {
+        if (t.status == TransactionStatus.completed) {
+          balance += t.signedAmount.cents;
+        }
+      }
+    }
+    return FakeResponse(200, {
+      'balance_cents': balance,
+      'currency': 'BRL',
+      'as_of': _clock.nowUtc().toIso8601String(),
+    });
+  }
 
   FakeResponse _byId(FakeRequest request) {
     final id = request.pathParams['id'];
@@ -107,14 +125,21 @@ final class FakeLedgerServer {
     return FakeResponse(200, {
       'data': [
         for (final (index, transaction) in page.indexed)
-          _maybeCorrupt(_json(transaction), start + index),
+          _maybeCorrupt(_summary(transaction), start + index),
       ],
       'next_cursor': hasMore ? _encodeCursor(page.last) : null,
+      'total': matching.length,
     });
   }
 
   Map<String, Object?> _json(Transaction transaction) =>
       TransactionMapper.fromEntity(transaction).toJson();
+
+  /// What a statement row needs; the rest stays for the detail endpoint.
+  Map<String, Object?> _summary(Transaction transaction) =>
+      _json(transaction)..removeWhere((key, _) => _detailOnly.contains(key));
+
+  static const _detailOnly = {'card_last4', 'message'};
 
   /// In the corrupted data scenario every 7th record arrives broken, in one
   /// of the ways real APIs break.
