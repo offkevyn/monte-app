@@ -6,14 +6,15 @@ import 'package:monte/features/ledger/domain/services/balance_calculator.dart';
 import '../../../../helpers/transactions.dart';
 
 void main() {
-  BalanceBreakdown compute(List<Transaction> transactions, {int opening = 0}) =>
+  BalanceBreakdown compute(List<Transaction> pending, {int settled = 0}) =>
       BalanceCalculator.compute(
-        openingBalance: Money.cents(opening),
-        transactions: transactions,
+        settled: Money.cents(settled),
+        pending: pending,
       );
 
-  test('no transactions: balance is the opening balance', () {
-    final balance = compute(const [], opening: 150000);
+  test('nothing pending: available is the settled balance', () {
+    final balance = compute(const [], settled: 150000);
+    expect(balance.posted, const Money.cents(150000));
     expect(balance.available, const Money.cents(150000));
     expect(balance.pendingDebits, Money.zero);
   });
@@ -22,36 +23,26 @@ void main() {
     expect(compute(const []).available, Money.zero);
   });
 
-  test('completed income adds and completed expense subtracts', () {
+  test('pending expense is reserved: lowers available, not settled', () {
     final balance = compute([
-      income(500000, id: 'a'),
-      expense(12990, id: 'b'),
-      expense(4550, id: 'c'),
-    ], opening: 10000);
-
-    expect(balance.posted, const Money.cents(10000 + 500000 - 12990 - 4550));
-    expect(balance.available, balance.posted);
-  });
-
-  test('pending expense is reserved: lowers available, not posted', () {
-    final balance = compute([
-      income(100000, id: 'a'),
       expense(30000, id: 'b', status: TransactionStatus.pending),
-    ]);
+      expense(4550, id: 'c', status: TransactionStatus.pending),
+    ], settled: 100000);
 
     expect(balance.posted, const Money.cents(100000));
-    expect(balance.pendingDebits, const Money.cents(30000));
-    expect(balance.available, const Money.cents(70000));
+    expect(balance.pendingDebits, const Money.cents(34550));
+    expect(balance.available, const Money.cents(65450));
   });
 
-  test('pending income, failed and reversed do not move the balance', () {
+  test('only pending expenses count, whatever else is in the list', () {
+    // The server sends pending debits; anything else that slips in (a debit
+    // that settled meanwhile, pending income) must not move the balance.
     final balance = compute([
       income(100000, id: 'a', status: TransactionStatus.pending),
       expense(5000, id: 'b', status: TransactionStatus.failed),
-      income(7000, id: 'c', status: TransactionStatus.failed),
       expense(8000, id: 'd', status: TransactionStatus.reversed),
-      income(9000, id: 'e', status: TransactionStatus.reversed),
-    ], opening: 1000);
+      expense(9000, id: 'e'),
+    ], settled: 1000);
 
     expect(
       balance,
@@ -63,23 +54,33 @@ void main() {
   });
 
   test('can go negative (overdraft) without breaking', () {
-    final balance = compute([expense(2500)], opening: 1000);
+    final balance = compute([
+      expense(2500, status: TransactionStatus.pending),
+    ], settled: 1000);
     expect(balance.available, const Money.cents(-1500));
   });
 
-  test('zero amount transactions change nothing', () {
-    expect(compute([expense(0), income(0, id: 'z')]).available, Money.zero);
+  test('a negative settled balance stays exact', () {
+    expect(compute(const [], settled: -999).available, const Money.cents(-999));
   });
 
-  test('10 000 transactions add up to the exact cent', () {
-    // 0,10 in and 0,03 out, 5 000 times each: a double would drift here.
-    final transactions = [
-      for (var i = 0; i < 5000; i++) ...[
-        income(10, id: 'in$i'),
-        expense(3, id: 'out$i'),
-      ],
+  test('zero amount pending changes nothing', () {
+    expect(
+      compute([expense(0, status: TransactionStatus.pending)]).available,
+      Money.zero,
+    );
+  });
+
+  test('10 000 pending debits add up to the exact cent', () {
+    // 0,03 reserved 10 000 times: a double would drift here.
+    final pending = [
+      for (var i = 0; i < 10000; i++)
+        expense(3, id: 'out$i', status: TransactionStatus.pending),
     ];
-    expect(compute(transactions).available, const Money.cents(35000));
+    expect(
+      compute(pending, settled: 100000).available,
+      const Money.cents(70000),
+    );
   });
 
   test('breakdown has value equality and a readable toString', () {

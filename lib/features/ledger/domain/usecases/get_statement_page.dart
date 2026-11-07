@@ -1,4 +1,4 @@
-import '../../../../core/freshness/data_freshness.dart';
+import '../../../../core/async/cancel_signal.dart';
 import '../../../../core/result/result.dart';
 import '../entities/transaction_filter.dart';
 import '../entities/transaction_page.dart';
@@ -12,20 +12,16 @@ final class GetStatementPage {
 
   final LedgerRepository _repository;
 
-  Future<Result<TransactionPage>> call(TransactionQuery query) =>
-      _repository.getTransactions(query);
-}
+  /// The first page as saved on the device, shown while the server answers.
+  Future<Result<TransactionPage?>> saved(TransactionFilter filter) =>
+      _repository.savedFirstPage(filter);
 
-/// Pull to refresh on the statement: syncs with the server before the
-/// first page is read again from the local database.
-final class RefreshLedger {
-  const RefreshLedger(this._repository);
-
-  final LedgerRepository _repository;
-
-  Future<Result<DataFreshness>> call() async =>
-      (await _repository.loadSnapshot(forceRefresh: true))
-          .map((snapshot) => snapshot.freshness);
+  /// [force] skips the "fetched seconds ago" shortcut (pull to refresh).
+  Future<Result<TransactionPage>> call(
+    TransactionQuery query, {
+    bool force = false,
+    CancelSignal? cancel,
+  }) => _repository.getPage(query, force: force, cancel: cancel);
 }
 
 /// Previews how many transactions a filter would show.
@@ -34,6 +30,6 @@ final class CountTransactions {
 
   final LedgerRepository _repository;
 
-  Future<Result<int>> call(TransactionFilter filter) =>
-      _repository.countTransactions(filter);
+  Future<Result<int>> call(TransactionFilter filter, {CancelSignal? cancel}) =>
+      _repository.countTransactions(filter, cancel: cancel);
 }
