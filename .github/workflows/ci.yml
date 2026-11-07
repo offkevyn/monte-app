@@ -106,9 +106,8 @@ jobs:
       - name: Limit Gradle memory
         run: |
           mkdir -p ~/.gradle
-          printf 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g
-kotlin.daemon.jvmargs=-Xmx1g
-' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g' >> ~/.gradle/gradle.properties
+          echo 'kotlin.daemon.jvmargs=-Xmx1g' >> ~/.gradle/gradle.properties
 
       # CoinGecko is answered inside the test, so no API key is needed here.
       - name: Run integration tests
