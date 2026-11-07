@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monte/core/failures/failure.dart';
 import 'package:monte/core/result/result.dart';
+import 'package:monte/core/session/user_data.dart';
 import 'package:monte/core/time/clock.dart';
 import 'package:monte/features/auth/domain/entities/cpf.dart';
 import 'package:monte/features/auth/domain/entities/session.dart';
@@ -16,6 +17,20 @@ Session sessionFor({DateTime? expiresAt}) => Session(
   accountLabel: 'Conta 0001 · 12345-6',
   expiresAt: expiresAt ?? DateTime.utc(2026, 11, 6, 12),
 );
+
+/// A store of the customer's data that records being emptied.
+class FakeUserData implements UserData {
+  FakeUserData({this.fails = false});
+
+  final bool fails;
+  var clears = 0;
+
+  @override
+  Future<void> clear() async {
+    clears++;
+    if (fails) throw Exception('disk');
+  }
+}
 
 class FakeAuthRepository implements AuthRepository {
   Session? stored;
@@ -108,6 +123,31 @@ void main() {
       expect((await SignIn(repository)(demoCpf, 'monte123')).isOk, isTrue);
       expect(repository.calls, ['signIn 00000000191 monte123']);
     });
+
+    final otherCpf = Cpf.tryParse('529.982.247-25')!;
+
+    test('another CPF on this device: the previous data goes', () async {
+      final data = FakeUserData();
+      final repository = FakeAuthRepository()..last = otherCpf;
+      await SignIn(repository, userData: [data])(demoCpf, 'monte123');
+      expect(data.clears, 1);
+    });
+
+    test('the same CPF again keeps what is saved', () async {
+      final data = FakeUserData();
+      final repository = FakeAuthRepository()..last = demoCpf;
+      await SignIn(repository, userData: [data])(demoCpf, 'monte123');
+      expect(data.clears, 0);
+    });
+
+    test('a rejected login by another CPF clears nothing', () async {
+      final data = FakeUserData();
+      final repository = FakeAuthRepository()
+        ..last = otherCpf
+        ..answer = const Err(InvalidCredentialsFailure());
+      await SignIn(repository, userData: [data])(demoCpf, 'errada');
+      expect(data.clears, 0);
+    });
   });
 
   group('ResolveStart', () {
@@ -115,27 +155,31 @@ void main() {
 
     test('no session: login with the last CPF', () async {
       final repository = FakeAuthRepository()..last = demoCpf;
-      final start = await ResolveStart(repository, clock)(
+      final start = await ResolveStart(repository, clock, SignOut(repository))(
         biometricsEnabled: true,
       );
       expect(start, isA<GoToLogin>());
       expect((start as GoToLogin).lastCpf, demoCpf);
     });
 
-    test('expired session: signs out and asks for the password', () async {
+    test('expired session: full sign out, then the password', () async {
+      final data = FakeUserData();
       final repository = FakeAuthRepository()
         ..stored = sessionFor(expiresAt: DateTime.utc(2026, 11, 6, 9))
         ..last = demoCpf;
-      final start = await ResolveStart(repository, clock)(
-        biometricsEnabled: true,
-      );
+      final start = await ResolveStart(
+        repository,
+        clock,
+        SignOut(repository, userData: [data]),
+      )(biometricsEnabled: true);
       expect(start, isA<GoToLogin>());
       expect(repository.calls, ['signOut']);
+      expect(data.clears, 1, reason: 'the saved data goes with the session');
     });
 
     test('valid session with fingerprint on: unlock with it', () async {
       final repository = FakeAuthRepository()..stored = sessionFor();
-      final start = await ResolveStart(repository, clock)(
+      final start = await ResolveStart(repository, clock, SignOut(repository))(
         biometricsEnabled: true,
       );
       expect((start as UnlockWithBiometrics).session, sessionFor());
@@ -145,17 +189,29 @@ void main() {
       'valid session without fingerprint: password again, CPF filled',
       () async {
         final repository = FakeAuthRepository()..stored = sessionFor();
-        final start = await ResolveStart(repository, clock)(
-          biometricsEnabled: false,
-        );
+        final start = await ResolveStart(
+          repository,
+          clock,
+          SignOut(repository),
+        )(biometricsEnabled: false);
         expect((start as GoToLogin).lastCpf, demoCpf);
       },
     );
   });
 
-  test('SignOut delegates to the repository', () async {
+  test('SignOut forgets the session and empties every store', () async {
     final repository = FakeAuthRepository();
-    await SignOut(repository)();
+    final ledger = FakeUserData();
+    final market = FakeUserData();
+    await SignOut(repository, userData: [ledger, market])();
     expect(repository.calls, ['signOut']);
+    expect((ledger.clears, market.clears), (1, 1));
+  });
+
+  test('one store failing does not stop the others', () async {
+    final broken = FakeUserData(fails: true);
+    final market = FakeUserData();
+    await SignOut(FakeAuthRepository(), userData: [broken, market])();
+    expect(market.clears, 1);
   });
 }

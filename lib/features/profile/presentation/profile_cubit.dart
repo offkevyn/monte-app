@@ -6,8 +6,6 @@ import '../../../core/security/biometric_authenticator.dart';
 import '../../../core/storage/app_preferences.dart';
 import '../../auth/domain/usecases/auth_usecases.dart';
 import '../../auth/presentation/current_session.dart';
-import '../../crypto/domain/repositories/market_repository.dart';
-import '../../ledger/domain/repositories/ledger_repository.dart';
 
 final class ProfileState extends Equatable {
   const ProfileState({
@@ -69,8 +67,6 @@ class ProfileCubit extends Cubit<ProfileState> {
     required this._biometrics,
     required this._appInfo,
     required this._signOut,
-    required this._ledger,
-    required this._market,
     required this._session,
   }) : super(const ProfileState());
 
@@ -78,8 +74,6 @@ class ProfileCubit extends Cubit<ProfileState> {
   final BiometricAuthenticator _biometrics;
   final AppInfo _appInfo;
   final SignOut _signOut;
-  final LedgerRepository _ledger;
-  final MarketRepository _market;
   final CurrentSession _session;
 
   Future<void> load() async {
@@ -132,9 +126,8 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<void> signOut() async {
     if (state.signingOut) return;
     emit(state.copyWith(signingOut: true));
+    // Signing out also empties both saved databases (see SignOut).
     await _signOut();
-    await _ledger.clear();
-    await _market.clear();
     _session.end();
   }
 }

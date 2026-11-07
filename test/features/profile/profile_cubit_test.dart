@@ -48,9 +48,7 @@ void main() {
     preferences: preferences,
     biometrics: biometrics,
     appInfo: const FixedAppInfo(),
-    signOut: SignOut(auth),
-    ledger: ledger,
-    market: market,
+    signOut: SignOut(auth, userData: [ledger, market]),
     session: session,
   );
 

@@ -1,5 +1,6 @@
 import '../../../../core/async/cancel_signal.dart';
 import '../../../../core/result/result.dart';
+import '../../../../core/session/user_data.dart';
 import '../entities/dashboard_snapshot.dart';
 import '../entities/date_span.dart';
 import '../entities/transaction.dart';
@@ -12,7 +13,7 @@ import '../entities/transaction_page.dart';
 /// away (`saved…`), then ask the server (`refresh…` / [getPage]), which
 /// saves the answer and returns it. When the server cannot be reached, the
 /// saved copy comes back marked as stale instead of an error.
-abstract interface class LedgerRepository {
+abstract interface class LedgerRepository implements UserData {
   /// Dashboard data saved on the device, without touching the network.
   /// `null` when nothing was saved yet.
   Future<Result<DashboardSnapshot?>> savedDashboard(DateSpan period);
@@ -60,5 +61,6 @@ abstract interface class LedgerRepository {
 
   /// Deletes everything saved (sign out), so no customer data stays on the
   /// device.
+  @override
   Future<void> clear();
 }

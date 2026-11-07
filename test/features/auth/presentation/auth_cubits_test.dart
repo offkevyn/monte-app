@@ -69,6 +69,14 @@ void main() {
       expect(cubit.state.password, 'monte123');
     });
 
+    test('prefill can say the session expired', () {
+      final cubit = build()..prefill(demoCpf, sessionExpired: true);
+      expect(cubit.state.failure, const UnauthorizedFailure());
+      expect(cubit.state.cpf, '000.000.001-91');
+      cubit.cpfChanged('000.000.001-9');
+      expect(cubit.state.failure, isNull, reason: 'typing clears it');
+    });
+
     test('prefill uses the last CPF, if any', () {
       expect((build()..prefill(demoCpf)).state.cpf, '000.000.001-91');
       expect((build()..prefill(null)).state.cpf, '');
@@ -184,7 +192,7 @@ void main() {
     final clock = FixedClock(DateTime.utc(2026, 11, 6, 10));
 
     SplashCubit build() => SplashCubit(
-      ResolveStart(repository, clock),
+      ResolveStart(repository, clock, SignOut(repository)),
       preferences,
       biometrics,
       current,
