@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,10 +14,11 @@ import 'package:monte/core/theme/theme_controller.dart';
 import 'package:monte/core/time/clock.dart';
 import 'package:monte/core/time/date_labels.dart';
 import 'package:monte/core/time/local_calendar.dart';
+import 'package:monte/core/time/local_date.dart';
 import 'package:monte/features/dashboard/presentation/dashboard_cubit.dart';
 import 'package:monte/features/dashboard/presentation/dashboard_page.dart';
+import 'package:monte/features/ledger/domain/entities/dashboard_snapshot.dart';
 import 'package:monte/features/ledger/domain/entities/date_span.dart';
-import 'package:monte/features/ledger/domain/entities/ledger_snapshot.dart';
 import 'package:monte/features/ledger/domain/entities/transaction.dart';
 import 'package:monte/features/ledger/domain/usecases/get_dashboard.dart';
 
@@ -34,9 +37,14 @@ void main() {
   late MemoryAppPreferences preferences;
   late FakeBiometrics biometrics;
 
-  LedgerSnapshot snapshot({Failure? syncFailure}) => LedgerSnapshot(
-    openingBalance: const Money.cents(100000),
-    transactions: [
+  final thisMonth = DateSpan(LocalDate(2026, 11, 1), LocalDate(2026, 11, 5));
+
+  DashboardSnapshot snapshot({
+    Failure? syncFailure,
+    DateSpan? period,
+    bool wholePeriod = true,
+  }) {
+    final transactions = [
       tx(
         id: 'salary',
         type: TransactionType.income,
@@ -51,12 +59,22 @@ void main() {
         at: DateTime.utc(2026, 11, 5, 13),
         status: TransactionStatus.pending,
       ),
-    ],
-    freshness: DataFreshness(
-      syncedAt: DateTime.utc(2026, 11, 5, 17, 32),
-      syncFailure: syncFailure,
-    ),
-  );
+    ];
+    return DashboardSnapshot(
+      // 1000 + 5000 - 129,90 settled by the server.
+      settledBalance: const Money.cents(587010),
+      pendingDebits: [transactions.last],
+      recent: transactions,
+      period: period ?? thisMonth,
+      periodTransactions: wholePeriod ? transactions : null,
+      freshness: DataFreshness(
+        syncedAt: DateTime.utc(2026, 11, 5, 17, 32),
+        syncFailure: syncFailure,
+      ),
+    );
+  }
+
+  List<bool> calls() => [for (final c in repository.dashboardCalls) c.force];
 
   DashboardCubit buildCubit() => DashboardCubit(
     GetDashboard(repository, clock, calendar),
@@ -65,7 +83,8 @@ void main() {
   );
 
   setUp(() {
-    repository = FakeLedgerRepository()..snapshot = Ok(snapshot());
+    repository = FakeLedgerRepository()
+      ..dashboardFor = ((period) => Ok(snapshot(period: period)));
     preferences = MemoryAppPreferences();
     biometrics = FakeBiometrics();
   });
@@ -79,8 +98,8 @@ void main() {
       final summary = cubit.state.summary!;
       // 1000 + 5000 - 129,90 completed, minus 72,69 reserved.
       expect(summary.balance.available, const Money.cents(587010 - 7269));
-      expect(summary.summary.totals.income, const Money.cents(500000));
-      expect(repository.snapshotCalls, [false]);
+      expect(summary.summary!.totals.income, const Money.cents(500000));
+      expect(calls(), [false]);
     });
 
     test('hidden balance comes back from preferences', () async {
@@ -121,34 +140,67 @@ void main() {
       expect(biometrics.reasons, hasLength(2));
     });
 
-    test('changing the period recomputes without the server', () async {
+    test('changing the period asks the server for that period', () async {
       final cubit = buildCubit();
       await cubit.load();
       await cubit.selectPeriod(PeriodPreset.last7Days);
       expect(cubit.state.preset, PeriodPreset.last7Days);
-      expect(cubit.state.summary!.summary.buckets, hasLength(7));
-      expect(repository.snapshotCalls, [false, false]);
+      expect(cubit.state.summary!.summary!.buckets, hasLength(7));
+      expect(calls(), [false, false]);
 
       await cubit.selectPeriod(PeriodPreset.last7Days);
-      expect(repository.snapshotCalls, hasLength(2), reason: 'same period');
+      expect(calls(), hasLength(2), reason: 'same period');
     });
 
-    test('pull to refresh forces a sync', () async {
+    test('pull to refresh forces the server; a visit does not', () async {
       final cubit = buildCubit();
       await cubit.load();
       await cubit.refresh();
-      expect(repository.snapshotCalls, [false, true]);
+      await cubit.refreshIfNeeded();
+      expect(calls(), [false, true, false]);
       expect(cubit.state.refreshing, isFalse);
     });
 
+    test('what is saved shows before the server answers', () async {
+      repository
+        ..savedDashboardResult = Ok(snapshot())
+        ..serverGate = Completer<void>();
+      final cubit = buildCubit();
+      final loading = cubit.load();
+      await Future<void>.delayed(Duration.zero);
+      expect(cubit.state.status, DashboardStatus.ready);
+      expect(cubit.state.refreshing, isTrue, reason: 'thin bar on top');
+
+      repository.serverGate!.complete();
+      await loading;
+      expect(cubit.state.refreshing, isFalse);
+    });
+
+    test('offline without the whole period: balance but no totals', () async {
+      repository.dashboardFor = (period) => Ok(
+        snapshot(
+          period: period,
+          wholePeriod: false,
+          syncFailure: const NoConnectionFailure(),
+        ),
+      );
+      final cubit = buildCubit();
+      await cubit.load();
+      expect(cubit.state.summary!.summary, isNull);
+      expect(
+        cubit.state.summary!.balance.available,
+        const Money.cents(587010 - 7269),
+      );
+    });
+
     test('first load failing shows the error; retry recovers', () async {
-      repository.snapshot = const Err(NoConnectionFailure());
+      repository.dashboardFor = (_) => const Err(NoConnectionFailure());
       final cubit = buildCubit();
       await cubit.load();
       expect(cubit.state.status, DashboardStatus.failure);
       expect(cubit.state.failure, const NoConnectionFailure());
 
-      repository.snapshot = Ok(snapshot());
+      repository.dashboardFor = (period) => Ok(snapshot(period: period));
       await cubit.load();
       expect(cubit.state.status, DashboardStatus.ready);
       expect(cubit.state.failure, isNull);
@@ -157,7 +209,8 @@ void main() {
     test('a failed refresh keeps the data on screen', () async {
       final cubit = buildCubit();
       await cubit.load();
-      repository.snapshot = const Err(ServerFailure(statusCode: 500));
+      repository.dashboardFor = (_) =>
+          const Err(ServerFailure(statusCode: 500));
       await cubit.refresh();
       expect(cubit.state.status, DashboardStatus.ready);
       expect(cubit.state.summary, isNotNull);
@@ -166,7 +219,7 @@ void main() {
     test('a cancelled load changes nothing', () async {
       final cubit = buildCubit();
       await cubit.load();
-      repository.snapshot = const Err(CancelledFailure());
+      repository.dashboardFor = (_) => const Err(CancelledFailure());
       await cubit.refresh();
       expect(cubit.state.failure, isNull);
       expect(cubit.state.status, DashboardStatus.ready);
@@ -270,14 +323,28 @@ void main() {
     testWidgets('stale data shows the yellow strip with the time', (
       tester,
     ) async {
-      repository.snapshot = Ok(
-        snapshot(syncFailure: const NoConnectionFailure()),
-      );
+      repository.dashboardFor = (_) =>
+          Ok(snapshot(syncFailure: const NoConnectionFailure()));
       await pump(tester);
       expect(
         find.text('Sem conexão. Mostrando dados de hoje, 14:32.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('offline without the period: a note instead of totals', (
+      tester,
+    ) async {
+      repository.dashboardFor = (period) => Ok(
+        snapshot(
+          period: period,
+          wholePeriod: false,
+          syncFailure: const NoConnectionFailure(),
+        ),
+      );
+      await pump(tester);
+      expect(find.byKey(const Key('dashboard.periodOffline')), findsOneWidget);
+      expect(find.text('—'), findsNWidgets(2));
     });
 
     testWidgets('lists the latest transactions with direction and sign', (
@@ -298,11 +365,11 @@ void main() {
     });
 
     testWidgets('error screen with retry', (tester) async {
-      repository.snapshot = const Err(NoConnectionFailure());
+      repository.dashboardFor = (_) => const Err(NoConnectionFailure());
       final cubit = await pump(tester);
       expect(find.byKey(const Key('dashboard.error')), findsOneWidget);
 
-      repository.snapshot = Ok(snapshot());
+      repository.dashboardFor = (period) => Ok(snapshot(period: period));
       await tester.tap(find.text('Tentar de novo'));
       await tester.pumpAndSettle();
       expect(cubit.state.status, DashboardStatus.ready);
@@ -311,10 +378,13 @@ void main() {
     testWidgets('empty account explains instead of showing a blank list', (
       tester,
     ) async {
-      repository.snapshot = Ok(
-        LedgerSnapshot(
-          openingBalance: Money.zero,
-          transactions: const [],
+      repository.dashboardFor = (period) => Ok(
+        DashboardSnapshot(
+          settledBalance: Money.zero,
+          pendingDebits: const [],
+          recent: const [],
+          period: period,
+          periodTransactions: const [],
           freshness: DataFreshness(syncedAt: DateTime.utc(2026, 11, 5)),
         ),
       );
