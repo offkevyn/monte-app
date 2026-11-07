@@ -100,6 +100,15 @@ jobs:
 
       - run: flutter pub get
 
+      # The project asks Gradle for an 8 GB heap, fine on a workstation but
+      # not next to an emulator on a 16 GB runner. The user-level file wins
+      # over the project's, so only CI gets the smaller numbers.
+      - name: Limit Gradle memory
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g' >> ~/.gradle/gradle.properties
+          echo 'kotlin.daemon.jvmargs=-Xmx1g' >> ~/.gradle/gradle.properties
+
       # CoinGecko is answered inside the test, so no API key is needed here.
       - name: Run integration tests
         uses: reactivecircus/android-emulator-runner@v2
