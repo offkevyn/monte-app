@@ -62,7 +62,62 @@ jobs:
       - run: flutter pub get
 
       - name: Run tests
-        run: flutter test --reporter expanded
+        run: flutter test --coverage --reporter expanded
+
+      # Generated files (*.g.dart) do not count.
+      - name: Coverage at least 70%
+        run: dart run tool/check_coverage.dart 70
+
+  release:
+    name: Release APK (prod, obfuscated)
+    needs: [analyze, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Flutter version from .fvmrc
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.fvm.outputs.version }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Limit Gradle memory
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g' >> ~/.gradle/gradle.properties
+
+      # No CoinGecko key here on purpose: anyone who can download the APK
+      # could pull it out. This build uses CoinGecko's public access.
+      # The symbols turn obfuscated stack traces back into readable ones
+      # (flutter symbolize).
+      - name: Build
+        run: >
+          flutter build apk --release --flavor prod
+          --obfuscate --split-debug-info=build/debug-info
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monte-prod-release-apk
+          path: build/app/outputs/flutter-apk/app-prod-release.apk
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: monte-prod-debug-symbols
+          path: build/debug-info
+          retention-days: 14
 
   integration:
     name: Integration (Android emulator)

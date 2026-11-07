@@ -52,6 +52,9 @@ dev_dependencies:
   path_provider_platform_interface: ^2.1.3
   plugin_platform_interface: ^2.1.8
 flutter:
+  # `flutter run` and `flutter test integration_test` build the dev flavor
+  # unless told otherwise (`--flavor prod`).
+  default-flavor: dev
   uses-material-design: true
 
   assets:

@@ -244,6 +244,19 @@ void main() {
       expect(find.textContaining('Nenhuma movimentação ainda'), findsOneWidget);
     });
 
+    testWidgets('a message fits a short screen with the keyboard open', (
+      tester,
+    ) async {
+      tester.view
+        ..physicalSize = const Size(320, 260)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      repository.failWith = const NoConnectionFailure();
+      await pump(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Tentar de novo'), findsOneWidget);
+    });
+
     testWidgets('error with retry', (tester) async {
       repository.failWith = const NoConnectionFailure();
       await pump(tester);
