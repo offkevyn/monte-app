@@ -81,7 +81,7 @@ void main() {
       // /extrato/transacao/:id, and back to the same list.
       await tester.tap(find.text('Extrato').last);
       await pumpUntilFound(tester, find.byKey(const Key('statement.search')));
-      await pumpUntilFound(tester, find.textContaining(' · ').first);
+      await pumpUntilFound(tester, find.textContaining(' · '));
       await tester.tap(find.byType(InkWell).at(3));
       await pumpUntilFound(tester, find.byKey(const Key('detail.amount')));
       expect(find.text('Detalhes'), findsOneWidget);
