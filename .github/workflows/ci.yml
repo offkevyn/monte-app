@@ -86,6 +86,11 @@ jobs:
           channel: stable
           cache: true
 
+      # The runner ships toolchains this job never uses; the emulator needs
+      # the room for its data partition.
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+
       # Hardware acceleration for the emulator on the Linux runner.
       - name: Enable KVM
         run: |
@@ -102,6 +107,8 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          cores: 4
+          disk-size: 4096M
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           script: flutter test integration_test -d emulator-5554
