@@ -30,7 +30,7 @@ jobs:
       - run: flutter pub get
 
       - name: Check formatting
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test integration_test
 
       - name: Analyze
         run: flutter analyze
@@ -63,3 +63,61 @@ jobs:
 
       - name: Run tests
         run: flutter test --reporter expanded
+
+  integration:
+    name: Integration (Android emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Flutter version from .fvmrc
+        id: fvm
+        run: echo "version=$(jq -r .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.fvm.outputs.version }}
+          channel: stable
+          cache: true
+
+      # The runner ships toolchains this job never uses; the emulator needs
+      # the room for its data partition.
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+
+      # Hardware acceleration for the emulator on the Linux runner.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - run: flutter pub get
+
+      # The project asks Gradle for an 8 GB heap, fine on a workstation but
+      # not next to an emulator on a 16 GB runner. The user-level file wins
+      # over the project's, so only CI gets the smaller numbers.
+      - name: Limit Gradle memory
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g' >> ~/.gradle/gradle.properties
+          echo 'kotlin.daemon.jvmargs=-Xmx1g' >> ~/.gradle/gradle.properties
+
+      # CoinGecko is answered inside the test, so no API key is needed here.
+      - name: Run integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          cores: 4
+          disk-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
+          script: flutter test integration_test -d emulator-5554
