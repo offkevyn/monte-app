@@ -11,6 +11,7 @@ import '../../../core/money/money_formatter.dart';
 import '../../../core/theme/monte_theme.dart';
 import '../../../core/time/date_labels.dart';
 import '../../../core/ui/failure_message.dart';
+import '../../../core/ui/on_visit.dart';
 import '../../../core/ui/skeleton.dart';
 import '../../../core/ui/stale_banner.dart';
 import '../../../core/ui/under_construction.dart';
@@ -29,7 +30,10 @@ typedef OpenFilters = Future<TransactionFilter?> Function(
 );
 
 class StatementPage extends StatelessWidget {
-  const StatementPage({super.key});
+  const StatementPage({super.key, this.visits});
+
+  /// Fires when this tab is on screen again (see `OnVisit`).
+  final Stream<Visit>? visits;
 
   /// Hero prefix shared with the detail screen.
   static const heroPrefix = 'statement';
@@ -41,6 +45,7 @@ class StatementPage extends StatelessWidget {
       create: (_) =>
           Modular.get<StatementBloc>()..add(const StatementStarted()),
       child: StatementView(
+        visits: visits,
         money: Modular.get<MoneyFormatter>(),
         dates: dates,
         onOpenDetail: (id) => Modular.to.pushNamed(Routes.statementDetail(id)),
@@ -63,8 +68,12 @@ class StatementView extends StatefulWidget {
     required this.dates,
     required this.onOpenDetail,
     required this.openFilters,
+    this.visits,
   });
 
+  /// Tab picked: back to the top. App back to the foreground: news, held
+  /// behind the pill when the person is down the list.
+  final Stream<Visit>? visits;
   final MoneyFormatter money;
   final DateLabels dates;
   final ValueChanged<String> onOpenDetail;
@@ -76,6 +85,10 @@ class StatementView extends StatefulWidget {
 
 class _StatementViewState extends State<StatementView> {
   final _search = TextEditingController();
+  final _scroll = ScrollController();
+
+  /// Within this distance of the top the list counts as "at the top".
+  static const _topSlack = 48.0;
 
   /// How close to the end (in pixels) the next page starts loading, so
   /// the user rarely sees the footer skeleton.
@@ -84,13 +97,43 @@ class _StatementViewState extends State<StatementView> {
   @override
   void dispose() {
     _search.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
+  bool get _atTop => !_scroll.hasClients || _scroll.offset < _topSlack;
+
+  void _onVisit(BuildContext context, Visit visit) {
+    final bloc = context.read<StatementBloc>();
+    switch (visit) {
+      case Visit.tab:
+        if (_scroll.hasClients) _scroll.jumpTo(0);
+        bloc.add(const StatementTabOpened());
+      case Visit.resume:
+        bloc.add(StatementResumed(atTop: _atTop));
+    }
+  }
+
+  void _showNew() {
+    context.read<StatementBloc>().add(const StatementNewShown());
+    if (_scroll.hasClients) {
+      _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
   bool _onScroll(ScrollNotification notification) {
-    if (notification.metrics.axis == Axis.vertical &&
-        notification.metrics.extentAfter < _prefetchDistance) {
-      context.read<StatementBloc>().add(const StatementNextPageRequested());
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final bloc = context.read<StatementBloc>();
+    if (notification.metrics.extentAfter < _prefetchDistance) {
+      bloc.add(const StatementNextPageRequested());
+    }
+    // Scrolled back to the top by hand: the news held back go in.
+    if (notification.metrics.pixels < _topSlack && bloc.state.newOnTop > 0) {
+      bloc.add(const StatementNewShown());
     }
     return false;
   }
@@ -112,7 +155,10 @@ class _StatementViewState extends State<StatementView> {
       context.read<StatementBloc>().add(StatementFilterChanged(filter));
 
   @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+  Widget build(BuildContext context) =>
+      OnVisit(visits: widget.visits, onVisit: _onVisit, child: _page(context));
+
+  Widget _page(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
     value: Theme.of(context).brightness == Brightness.dark
         ? SystemUiOverlayStyle.light
         : SystemUiOverlayStyle.dark,
@@ -304,31 +350,46 @@ class _StatementViewState extends State<StatementView> {
               bloc.add(const StatementRefreshed());
               await bloc.stream.firstWhere((s) => !s.reloading);
             },
-            child: CustomScrollView(
-              // Keeps the scroll position when coming back from the detail
-              // or switching tabs.
-              key: const PageStorageKey('statement.list'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                if (state.freshness case final freshness?
-                    when freshness.isStale)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    sliver: SliverToBoxAdapter(
-                      child: StaleBanner(
-                        freshness: freshness,
-                        dates: widget.dates,
-                      ),
+            child: Stack(
+              children: [
+                _list(context, state),
+                if (state.newOnTop > 0)
+                  Positioned(
+                    top: 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: _NewOnTopPill(state.newOnTop, _showNew),
                     ),
                   ),
-                for (final group in state.groups) ..._group(group),
-                SliverToBoxAdapter(child: _footer(context, state)),
               ],
             ),
           ),
         );
     }
   }
+
+  Widget _list(BuildContext context, StatementState state) => CustomScrollView(
+    // Keeps the scroll position when coming back from the detail.
+    key: const PageStorageKey('statement.list'),
+    controller: _scroll,
+    physics: const AlwaysScrollableScrollPhysics(),
+    slivers: [
+      if (state.freshness case final freshness? when freshness.isStale)
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          sliver: SliverToBoxAdapter(
+            child: StaleBanner(
+              freshness: freshness,
+              dates: widget.dates,
+              deviceOnly: state.fromDevice && !state.filter.isEmpty,
+            ),
+          ),
+        ),
+      for (final group in state.groups) ..._group(group),
+      SliverToBoxAdapter(child: _footer(context, state)),
+    ],
+  );
 
   List<Widget> _group(DayGroup group) {
     final text = Theme.of(context).textTheme;
@@ -418,12 +479,77 @@ class _StatementViewState extends State<StatementView> {
         ),
       );
     }
+    if (state.limitReached) {
+      return Padding(
+        key: const Key('statement.limit'),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          children: [
+            Icon(Icons.manage_search_rounded, color: context.monte.subtle),
+            const SizedBox(height: 6),
+            Text(
+              state.filter.isEmpty
+                  ? 'Pra ver transações mais antigas, use a busca ou o '
+                        'filtro de período.'
+                  : 'Pra ver mais, refine a busca ou o filtro.',
+              textAlign: TextAlign.center,
+              style: subtle,
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
       child: Text(
         state.hasMore ? '' : 'Isso é tudo por aqui.',
         textAlign: TextAlign.center,
         style: subtle,
+      ),
+    );
+  }
+}
+
+/// "↑ 2 novas transações", floating at the top of the list while news wait
+/// for the person to come back up.
+class _NewOnTopPill extends StatelessWidget {
+  const _NewOnTopPill(this.count, this.onTap);
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      key: const Key('statement.newOnTop'),
+      color: scheme.primary,
+      elevation: 3,
+      shape: const StadiumBorder(),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.arrow_upward_rounded,
+                size: 18,
+                color: scheme.onPrimary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                count == 1 ? '1 nova transação' : '$count novas transações',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: scheme.onPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -85,6 +85,15 @@ void main() {
     }
   });
 
+  test('a brand new account has only its last few days', () {
+    final now = DateTime.utc(2026, 11, 6, 2, 30);
+    final data = FakeLedgerGenerator.generate(seed: 7, count: 3, nowUtc: now);
+    expect(data.transactions, hasLength(3));
+    for (final t in data.transactions) {
+      expect(now.difference(t.occurredAt).inDays, lessThanOrEqualTo(3));
+    }
+  });
+
   test('empty account', () {
     final data = generate(count: 0);
     expect(data.transactions, isEmpty);

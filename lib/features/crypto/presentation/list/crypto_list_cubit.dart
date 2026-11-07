@@ -206,6 +206,9 @@ class CryptoListCubit extends Cubit<CryptoListState> {
           pageFailure: () => null,
         ),
       );
+    } else if (!state.refreshing) {
+      // Coins stay on screen while the new ones load (thin bar on top).
+      emit(state.copyWith(refreshing: true));
     }
 
     final Result<MarketList> result;

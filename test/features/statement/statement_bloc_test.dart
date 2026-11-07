@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:monte/core/async/cancel_signal.dart';
 import 'package:monte/core/failures/failure.dart';
 import 'package:monte/core/freshness/data_freshness.dart';
-import 'package:monte/core/money/money.dart';
 import 'package:monte/core/result/result.dart';
 import 'package:monte/core/time/local_calendar.dart';
 import 'package:monte/core/time/local_date.dart';
-import 'package:monte/features/ledger/domain/entities/ledger_snapshot.dart';
+import 'package:monte/features/ledger/domain/entities/dashboard_snapshot.dart';
+import 'package:monte/features/ledger/domain/entities/date_span.dart';
 import 'package:monte/features/ledger/domain/entities/transaction.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_page.dart';
@@ -21,14 +22,24 @@ import '../../helpers/transactions.dart';
 /// ordering (debounce, cancellation, stale pages) can be checked exactly.
 class ControlledRepository implements LedgerRepository {
   final requests = <TransactionQuery>[];
+  final forced = <bool>[];
+  final cancels = <CancelSignal?>[];
   final _pending = <Completer<Result<TransactionPage>>>[];
-  var refreshes = 0;
+
+  /// What [savedFirstPage] answers.
+  TransactionPage? saved;
 
   int get pendingCount => _pending.where((c) => !c.isCompleted).length;
 
   @override
-  Future<Result<TransactionPage>> getTransactions(TransactionQuery query) {
+  Future<Result<TransactionPage>> getPage(
+    TransactionQuery query, {
+    bool force = false,
+    CancelSignal? cancel,
+  }) {
     requests.add(query);
+    forced.add(force);
+    cancels.add(cancel);
     final completer = Completer<Result<TransactionPage>>();
     _pending.add(completer);
     return completer.future;
@@ -39,26 +50,36 @@ class ControlledRepository implements LedgerRepository {
       _pending[index].complete(result);
 
   @override
-  Future<Result<LedgerSnapshot>> loadSnapshot({
-    bool forceRefresh = false,
-  }) async {
-    refreshes++;
-    return Ok(
-      LedgerSnapshot(
-        openingBalance: Money.zero,
-        transactions: const [],
-        freshness: DataFreshness(syncedAt: DateTime.utc(2026, 11, 5)),
-      ),
-    );
-  }
+  Future<Result<TransactionPage?>> savedFirstPage(
+    TransactionFilter filter,
+  ) async => Ok(saved);
 
   @override
-  Future<Result<int>> countTransactions(TransactionFilter filter) async =>
-      const Ok(0);
+  Future<Result<int>> countTransactions(
+    TransactionFilter filter, {
+    CancelSignal? cancel,
+  }) async => const Ok(0);
 
   @override
-  Future<Result<Transaction>> getTransaction(String id) =>
+  Future<Result<Transaction?>> savedTransaction(String id) =>
       throw UnimplementedError();
+
+  @override
+  Future<Result<Transaction>> refreshTransaction(String id) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<DashboardSnapshot?>> savedDashboard(DateSpan period) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<DashboardSnapshot>> refreshDashboard(
+    DateSpan period, {
+    bool force = false,
+  }) => throw UnimplementedError();
+
+  @override
+  void expireRecentFetches() {}
 
   @override
   Future<void> clear() async {}
@@ -86,7 +107,6 @@ void main() {
     repository = ControlledRepository();
     bloc = StatementBloc(
       GetStatementPage(repository),
-      RefreshLedger(repository),
       FixedOffsetCalendar.brasilia,
       debounce: const Duration(milliseconds: 40),
     );
@@ -289,12 +309,192 @@ void main() {
     expect(bloc.state.failure, isNull);
   });
 
-  test('pull to refresh syncs before reading the first page', () async {
+  test('pull to refresh forces the server, other loads do not', () async {
     await startWith(page(['a']));
     bloc.add(const StatementRefreshed());
     await settle();
-    expect(repository.refreshes, 1);
-    expect(repository.requests, hasLength(2));
+    expect(repository.forced, [false, true]);
+  });
+
+  test(
+    'what is saved shows first, then the server answer replaces it',
+    () async {
+      repository.saved = page(['old']);
+      bloc.add(const StatementStarted());
+      await settle();
+      expect(bloc.state.status, StatementStatus.ready);
+      expect(bloc.state.items.map((t) => t.id), ['old']);
+      expect(bloc.state.reloading, isTrue, reason: 'thin bar while updating');
+
+      repository.answer(0, Ok(page(['new', 'old'])));
+      await settle();
+      expect(bloc.state.items.map((t) => t.id), ['new', 'old']);
+      expect(bloc.state.reloading, isFalse);
+    },
+  );
+
+  test('a new search cancels the request of the old one', () async {
+    await startWith(page(['a']));
+    bloc.add(const StatementQueryChanged('pix'));
+    await settle(60);
+    bloc.add(const StatementQueryChanged('padaria'));
+    await settle(60);
+    expect(repository.cancels[1]!.isCancelled, isTrue);
+    expect(repository.cancels[2]!.isCancelled, isFalse);
+  });
+
+  test('news on top keep the pages already loaded below', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementNextPageRequested());
+    await settle();
+    repository.answer(1, Ok(page(['e', 'f'], next: 'cursor-f', day: 4)));
+    await settle();
+
+    // A Pix arrived: the fresh first page ends at "d", already on screen.
+    bloc.add(const StatementResumed(atTop: true));
+    await settle();
+    repository.answer(2, Ok(page(['pix', 'c', 'd'], next: 'cursor-d')));
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['pix', 'c', 'd', 'e', 'f']);
+    expect(bloc.state.nextCursor, 'cursor-f');
+  });
+
+  test('offline pages from the device are flagged for the banner', () async {
+    final offline = TransactionPage(
+      items: page(['a']).items,
+      nextCursor: null,
+      freshness: DataFreshness(
+        syncedAt: DateTime.utc(2026, 11, 5),
+        syncFailure: const NoConnectionFailure(),
+      ),
+      fromDevice: true,
+    );
+    await startWith(offline);
+    expect(bloc.state.fromDevice, isTrue);
+  });
+
+  test('a search never keeps rows of the list it replaced', () async {
+    await startWith(page(['a', 'b', 'c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementQueryChanged('pix'));
+    await settle(60);
+    // The search page ends at "b", which is also in the old list.
+    repository.answer(1, Ok(page(['b'], next: 'cursor-b')));
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['b']);
+    expect(bloc.state.nextCursor, 'cursor-b');
+  });
+
+  test('picking the tab again starts over from the top', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementNextPageRequested());
+    await settle();
+    repository.answer(1, Ok(page(['e', 'f'], next: 'cursor-f', day: 4)));
+    await settle();
+
+    repository.saved = page(['c', 'd'], next: 'cursor-d');
+    bloc.add(const StatementTabOpened());
+    await settle();
+    // What is saved, at once, with the thin bar while the server answers.
+    expect(bloc.state.items.map((t) => t.id), ['c', 'd']);
+    expect(bloc.state.reloading, isTrue);
+
+    repository.answer(2, Ok(page(['pix', 'c'], next: 'cursor-c')));
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['pix', 'c']);
+    expect(bloc.state.nextCursor, 'cursor-c');
+    expect(bloc.state.reloading, isFalse);
+  });
+
+  test('picking the tab again keeps the filter', () async {
+    await startWith(page(['a']));
+    final income = TransactionFilter(types: const {TransactionType.income});
+    bloc.add(StatementFilterChanged(income));
+    await settle();
+    repository.answer(1, Ok(page(['a'])));
+    await settle();
+
+    bloc.add(const StatementTabOpened());
+    await settle();
+    expect(repository.requests.last.filter, income);
+  });
+
+  test('news while down the list wait behind the pill', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementResumed(atTop: false));
+    await settle();
+    repository.answer(1, Ok(page(['p1', 'p2', 'c', 'd'], next: 'cursor-d')));
+    await settle();
+    // The rows being read do not move.
+    expect(bloc.state.items.map((t) => t.id), ['c', 'd']);
+    expect(bloc.state.newOnTop, 2);
+
+    bloc.add(const StatementNewShown());
+    await settle();
+    expect(bloc.state.items.map((t) => t.id), ['p1', 'p2', 'c', 'd']);
+    expect(bloc.state.newOnTop, 0);
+  });
+
+  test('coming back with nothing new shows no pill', () async {
+    await startWith(page(['c', 'd'], next: 'cursor-d'));
+    bloc.add(const StatementResumed(atTop: false));
+    await settle();
+    repository.answer(1, Ok(page(['c', 'd'], next: 'cursor-d')));
+    await settle();
+    expect(bloc.state.newOnTop, 0);
+    expect(bloc.state.items.map((t) => t.id), ['c', 'd']);
+  });
+
+  group('limit', () {
+    late StatementBloc small;
+
+    setUp(() {
+      small = StatementBloc(
+        GetStatementPage(repository),
+        FixedOffsetCalendar.brasilia,
+        pageSize: 2,
+        maxItems: 4,
+      );
+    });
+
+    tearDown(() => small.close());
+
+    Future<void> scrollTo(List<String> first, List<String> second) async {
+      small.add(const StatementStarted());
+      await settle();
+      repository.answer(0, Ok(page(first, next: 'cursor-1')));
+      await settle();
+      small.add(const StatementNextPageRequested());
+      await settle();
+      repository.answer(1, Ok(page(second, next: 'cursor-2', day: 4)));
+      await settle();
+    }
+
+    test('the list stops at the limit and asks for the filters', () async {
+      await scrollTo(['a', 'b'], ['c', 'd']);
+      expect(small.state.items, hasLength(4));
+      expect(small.state.limitReached, isTrue);
+      expect(small.state.hasMore, isFalse);
+
+      small.add(const StatementNextPageRequested());
+      await settle();
+      expect(repository.requests, hasLength(2), reason: 'no third page');
+    });
+
+    test('a page crossing the limit is cut at it', () async {
+      await scrollTo(['a', 'b', 'c'], ['d', 'e', 'f']);
+      expect(small.state.items.map((t) => t.id), ['a', 'b', 'c', 'd']);
+      expect(small.state.limitReached, isTrue);
+    });
+
+    test('a new search starts below the limit again', () async {
+      await scrollTo(['a', 'b'], ['c', 'd']);
+      small.add(const StatementQueryChanged('pix'));
+      await settle(400);
+      repository.answer(2, Ok(page(['a'], next: 'cursor-a')));
+      await settle();
+      expect(small.state.limitReached, isFalse);
+      expect(small.state.hasMore, isTrue);
+    });
   });
 
   test('closes cleanly after searches (no leaked subscriptions)', () async {

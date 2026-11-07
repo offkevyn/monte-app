@@ -12,6 +12,7 @@ import '../../../core/theme/monte_theme.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/time/date_labels.dart';
 import '../../../core/ui/failure_message.dart';
+import '../../../core/ui/on_visit.dart';
 import '../../../core/ui/skeleton.dart';
 import '../../../core/ui/stale_banner.dart';
 import '../../../core/ui/under_construction.dart';
@@ -30,22 +31,30 @@ class DashboardPage extends StatelessWidget {
     super.key,
     required this.onOpenStatement,
     required this.onOpenCrypto,
+    this.visits,
   });
 
   final VoidCallback onOpenStatement;
   final VoidCallback onOpenCrypto;
 
+  /// Fires when this tab is on screen again (see `OnVisit`).
+  final Stream<Visit>? visits;
+
   @override
   Widget build(BuildContext context) => BlocProvider(
     create: (_) => Modular.get<DashboardCubit>()..load(),
-    child: DashboardView(
-      customerName: Modular.get<CurrentSession>().value?.customerName ?? '',
-      money: Modular.get<MoneyFormatter>(),
-      dates: Modular.get<DateLabels>(),
-      theme: Modular.get<ThemeController>(),
-      onOpenStatement: onOpenStatement,
-      onOpenCrypto: onOpenCrypto,
-      cryptoCard: CryptoHighlightsCard(onOpenAll: onOpenCrypto),
+    child: OnVisit(
+      visits: visits,
+      onVisit: (context, _) => context.read<DashboardCubit>().refreshIfNeeded(),
+      child: DashboardView(
+        customerName: Modular.get<CurrentSession>().value?.customerName ?? '',
+        money: Modular.get<MoneyFormatter>(),
+        dates: Modular.get<DateLabels>(),
+        theme: Modular.get<ThemeController>(),
+        onOpenStatement: onOpenStatement,
+        onOpenCrypto: onOpenCrypto,
+        cryptoCard: CryptoHighlightsCard(onOpenAll: onOpenCrypto),
+      ),
     ),
   );
 }
@@ -87,33 +96,46 @@ class DashboardView extends StatelessWidget {
           final summary = state.summary;
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: SystemUiOverlayStyle.light,
-            child: RefreshIndicator(
-              onRefresh: cubit.refresh,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: _Header(
-                      customerName: customerName,
-                      dates: dates,
-                      theme: theme,
-                      card: switch (state.status) {
-                        DashboardStatus.ready => _BalanceCard(
-                          summary: summary!,
-                          state: state,
-                          money: money,
+            child: Stack(
+              children: [
+                RefreshIndicator(
+                  onRefresh: cubit.refresh,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: _Header(
+                          customerName: customerName,
                           dates: dates,
-                          onToggle: cubit.toggleBalance,
+                          theme: theme,
+                          card: switch (state.status) {
+                            DashboardStatus.ready => _BalanceCard(
+                              summary: summary!,
+                              state: state,
+                              money: money,
+                              dates: dates,
+                              onToggle: cubit.toggleBalance,
+                            ),
+                            DashboardStatus.loading => const _CardSkeleton(),
+                            DashboardStatus.failure => const SizedBox.shrink(),
+                          },
                         ),
-                        DashboardStatus.loading => const _CardSkeleton(),
-                        DashboardStatus.failure => const SizedBox.shrink(),
-                      },
+                      ),
+                      ..._body(context, state, cubit),
+                      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                    ],
+                  ),
+                ),
+                // Updating behind what is on screen: a thin bar, no
+                // skeletons.
+                if (state.refreshing && state.summary != null)
+                  const SafeArea(
+                    child: LinearProgressIndicator(
+                      key: Key('dashboard.refreshing'),
+                      minHeight: 2,
                     ),
                   ),
-                  ..._body(context, state, cubit),
-                  const SliverToBoxAdapter(child: SizedBox(height: 24)),
-                ],
-              ),
+              ],
             ),
           );
         },
@@ -179,12 +201,15 @@ class DashboardView extends StatelessWidget {
                 dates: dates,
                 onSelected: cubit.selectPeriod,
               ),
-              child: MovementChart(
-                summary: summary.summary,
-                money: money,
-                dates: dates,
-                hidden: state.balanceHidden,
-              ),
+              child: switch (summary.summary) {
+                final period? => MovementChart(
+                  summary: period,
+                  money: money,
+                  dates: dates,
+                  hidden: state.balanceHidden,
+                ),
+                null => _PeriodOffline(onRetry: cubit.refresh),
+              },
             ),
           ),
           SliverToBoxAdapter(
@@ -394,7 +419,7 @@ class _BalanceCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final hidden = state.balanceHidden;
     final balance = summary.balance;
-    final totals = summary.summary.totals;
+    final totals = summary.summary?.totals;
     final period = LedgerLabels.periodShort(state.preset, dates);
 
     return Card(
@@ -455,7 +480,7 @@ class _BalanceCard extends StatelessWidget {
                 Expanded(
                   child: _Flow(
                     label: 'Entradas · $period',
-                    value: money.format(totals.income),
+                    value: totals == null ? '—' : money.format(totals.income),
                     icon: Icons.south_west_rounded,
                     color: colors.income,
                     hidden: hidden,
@@ -464,7 +489,7 @@ class _BalanceCard extends StatelessWidget {
                 Expanded(
                   child: _Flow(
                     label: 'Saídas · $period',
-                    value: money.format(totals.expense),
+                    value: totals == null ? '—' : money.format(totals.expense),
                     icon: Icons.north_east_rounded,
                     color: colors.expense,
                     hidden: hidden,
@@ -731,6 +756,32 @@ class _PeriodPicker extends StatelessWidget {
           Icon(Icons.expand_more_rounded, color: context.monte.brand),
         ],
       ),
+    ),
+  );
+}
+
+/// In place of the chart when the device does not have the whole period
+/// (offline): partial totals would be wrong, so none are shown.
+class _PeriodOffline extends StatelessWidget {
+  const _PeriodOffline({required this.onRetry});
+
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 20),
+    child: Column(
+      children: [
+        Icon(Icons.cloud_off_rounded, color: context.monte.subtle),
+        const SizedBox(height: 8),
+        Text(
+          'Os totais desse período precisam de internet.',
+          key: const Key('dashboard.periodOffline'),
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        TextButton(onPressed: onRetry, child: const Text('Tentar de novo')),
+      ],
     ),
   );
 }

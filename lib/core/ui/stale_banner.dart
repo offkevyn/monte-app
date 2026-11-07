@@ -7,10 +7,19 @@ import '../time/date_labels.dart';
 
 /// Yellow strip: the numbers on screen are the local copy, and since when.
 class StaleBanner extends StatelessWidget {
-  const StaleBanner({super.key, required this.freshness, required this.dates});
+  const StaleBanner({
+    super.key,
+    required this.freshness,
+    required this.dates,
+    this.deviceOnly = false,
+  });
 
   final DataFreshness freshness;
   final DateLabels dates;
+
+  /// The list was read from what is saved on the device (a search or a page
+  /// the server could not answer), so it may be missing transactions.
+  final bool deviceOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -34,8 +43,10 @@ class StaleBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '$reason Mostrando dados de ${when[0].toLowerCase()}'
-                '${when.substring(1)}.',
+                deviceOnly
+                    ? '$reason Mostrando só o que está salvo no aparelho.'
+                    : '$reason Mostrando dados de ${when[0].toLowerCase()}'
+                          '${when.substring(1)}.',
                 style: Theme.of(context).textTheme.bodySmall
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),

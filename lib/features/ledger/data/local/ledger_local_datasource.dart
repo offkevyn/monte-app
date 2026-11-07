@@ -5,6 +5,8 @@ import 'package:drift/drift.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/text/search_text.dart';
 import '../../../../core/time/local_calendar.dart';
+import '../../../../core/time/local_date.dart';
+import '../../domain/entities/date_span.dart';
 import '../../domain/entities/transaction.dart';
 import '../../domain/entities/transaction_filter.dart';
 import '../../domain/entities/transaction_page.dart';
@@ -12,81 +14,176 @@ import '../dtos/transaction_dto.dart';
 import '../mappers/transaction_mapper.dart';
 import 'ledger_database.dart';
 
-/// What the last successful sync stored.
-final class LocalSyncState {
-  const LocalSyncState({
-    required this.openingBalance,
+/// What the last dashboard refresh saved.
+final class SavedDashboardState {
+  const SavedDashboardState({
+    required this.balance,
+    required this.period,
+    required this.pendingIds,
     required this.syncedAt,
     required this.skippedRecords,
   });
 
-  final Money openingBalance;
+  final Money balance;
+  final DateSpan period;
+  final List<String> pendingIds;
   final DateTime syncedAt;
   final int skippedRecords;
 }
 
-/// Reads and writes the encrypted local database. The statement, the
-/// dashboard and the detail screen all read from here: the single source
-/// of truth the requirements ask for.
+/// When something was last fetched, and how many records were unreadable.
+final class SavedSyncMark {
+  const SavedSyncMark({required this.syncedAt, required this.skippedRecords});
+
+  final DateTime syncedAt;
+  final int skippedRecords;
+}
+
+/// Reads and writes the encrypted local database. Everything the server
+/// sends is written here first and the screens read from here: the single
+/// source of truth the requirements ask for.
+///
+/// It is a cache, not a full copy: [prune] keeps the newest transactions,
+/// the dashboard period, the pending debits and the details opened lately.
 final class LedgerLocalDataSource {
   LedgerLocalDataSource(this._db, this._calendar);
 
   final LedgerDatabase _db;
   final LocalCalendar _calendar;
 
-  static const _syncRowId = 1;
+  static const _singleRowId = 1;
 
-  Future<LocalSyncState?> readSyncState() async {
-    final row = await (_db.select(
-      _db.syncState,
-    )..where((s) => s.id.equals(_syncRowId))).getSingleOrNull();
-    if (row == null) return null;
-    return LocalSyncState(
-      openingBalance: Money.cents(row.openingBalanceCents),
-      syncedAt: DateTime.fromMicrosecondsSinceEpoch(
-        row.syncedAtMicros,
-        isUtc: true,
-      ),
-      skippedRecords: row.skippedRecords,
-    );
-  }
+  /// Newest transactions kept for the statement offline.
+  static const keepNewest = 200;
 
-  /// Swaps the whole local copy in one database transaction: readers see
-  /// either the old data or the new data, never half of each.
-  Future<void> replaceAll({
-    required Money openingBalance,
+  /// Details opened lately, kept with their full data.
+  static const keepOpened = 50;
+
+  /// Saves list items. A row that already has its details keeps them: the
+  /// list only refreshes the summary (a pending debit may have settled).
+  Future<void> saveSummaries(Iterable<Transaction> transactions) =>
+      _db.batch((batch) {
+        for (final transaction in transactions) {
+          batch.insert(
+            _db.transactions,
+            _toRow(transaction),
+            onConflict: DoUpdate((_) => _summaryOnly(transaction)),
+          );
+        }
+      });
+
+  /// Saves a transaction that came from the detail endpoint.
+  Future<void> saveDetail(
+    Transaction transaction, {
+    required DateTime openedAt,
+  }) => _db
+      .into(_db.transactions)
+      .insertOnConflictUpdate(
+        _toRow(transaction).copyWith(
+          detailed: const Value(true),
+          openedAtMicros: Value(openedAt.toUtc().microsecondsSinceEpoch),
+        ),
+      );
+
+  /// Saves a dashboard refresh in one database transaction: readers see the
+  /// old dashboard or the new one, never half of each.
+  Future<void> saveDashboard({
+    required Money balance,
+    required DateSpan period,
+    required List<Transaction> pendingDebits,
     required List<Transaction> transactions,
     required DateTime syncedAt,
     required int skippedRecords,
   }) => _db.transaction(() async {
-    await _db.delete(_db.transactions).go();
-    await _db.batch(
-      (batch) => batch.insertAll(_db.transactions, transactions.map(_toRow)),
-    );
+    await saveSummaries([...pendingDebits, ...transactions]);
     await _db
-        .into(_db.syncState)
+        .into(_db.dashboardState)
         .insertOnConflictUpdate(
-          SyncStateCompanion.insert(
-            id: const Value(_syncRowId),
-            openingBalanceCents: openingBalance.cents,
+          DashboardStateCompanion.insert(
+            id: const Value(_singleRowId),
+            balanceCents: balance.cents,
+            periodFirst: period.first.toString(),
+            periodLast: period.last.toString(),
+            pendingIds: jsonEncode([for (final t in pendingDebits) t.id]),
             syncedAtMicros: syncedAt.toUtc().microsecondsSinceEpoch,
             skippedRecords: Value(skippedRecords),
           ),
         );
   });
 
-  /// Removes every transaction and the sync state.
-  Future<void> clear() => _db.transaction(() async {
-    await _db.delete(_db.transactions).go();
-    await _db.delete(_db.syncState).go();
-  });
+  Future<SavedDashboardState?> readDashboardState() async {
+    final row = await (_db.select(
+      _db.dashboardState,
+    )..where((s) => s.id.equals(_singleRowId))).getSingleOrNull();
+    if (row == null) return null;
+    return SavedDashboardState(
+      balance: Money.cents(row.balanceCents),
+      period: DateSpan(_date(row.periodFirst), _date(row.periodLast)),
+      pendingIds: [for (final id in jsonDecode(row.pendingIds) as List) '$id'],
+      syncedAt: _instant(row.syncedAtMicros),
+      skippedRecords: row.skippedRecords,
+    );
+  }
 
-  /// Every transaction, newest first.
-  Future<List<Transaction>> all() async {
-    final rows = await (_db.select(
-      _db.transactions,
-    )..orderBy(_pagingOrder)).get();
+  Future<void> markStatementSynced({
+    required DateTime syncedAt,
+    required int skippedRecords,
+  }) => _db
+      .into(_db.statementState)
+      .insertOnConflictUpdate(
+        StatementStateCompanion.insert(
+          id: const Value(_singleRowId),
+          syncedAtMicros: syncedAt.toUtc().microsecondsSinceEpoch,
+          skippedRecords: Value(skippedRecords),
+        ),
+      );
+
+  Future<SavedSyncMark?> readStatementState() async {
+    final row = await (_db.select(
+      _db.statementState,
+    )..where((s) => s.id.equals(_singleRowId))).getSingleOrNull();
+    return row == null
+        ? null
+        : SavedSyncMark(
+            syncedAt: _instant(row.syncedAtMicros),
+            skippedRecords: row.skippedRecords,
+          );
+  }
+
+  /// Every saved transaction that happened within [span], newest first.
+  Future<List<Transaction>> inPeriod(DateSpan span) async {
+    final range = _calendar.rangeOf(span.first, span.last);
+    final rows =
+        await (_db.select(_db.transactions)
+              ..where(
+                (t) =>
+                    t.occurredAtMicros.isBiggerOrEqualValue(
+                      range.start.microsecondsSinceEpoch,
+                    ) &
+                    t.occurredAtMicros.isSmallerThanValue(
+                      range.end.microsecondsSinceEpoch,
+                    ),
+              )
+              ..orderBy(_pagingOrder))
+            .get();
     return rows.map(_toEntity).toList();
+  }
+
+  /// The saved transactions among [ids], newest first.
+  Future<List<Transaction>> byIds(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final rows =
+        await (_db.select(_db.transactions)
+              ..where((t) => t.id.isIn(ids))
+              ..orderBy(_pagingOrder))
+            .get();
+    return rows.map(_toEntity).toList();
+  }
+
+  Future<bool> isEmpty() async {
+    final count = _db.transactions.id.count();
+    final query = _db.selectOnly(_db.transactions)..addColumns([count]);
+    return ((await query.getSingle()).read(count) ?? 0) == 0;
   }
 
   /// Same conditions as [page], counted in SQL.
@@ -105,8 +202,10 @@ final class LedgerLocalDataSource {
     return row == null ? null : _toEntity(row);
   }
 
-  /// One page with the filter applied in SQL. Keyset pagination: the cursor
-  /// is the last item shown, and the next page starts strictly after it.
+  /// One page of what is saved, with the filter applied in SQL. Keyset
+  /// pagination: the cursor is the last item shown, and the next page
+  /// starts strictly after it. The cursor has the same format as the
+  /// server's, so a list can go on from the device when the network drops.
   ///
   /// Throws a [FormatException] for a cursor this app did not create.
   Future<({List<Transaction> items, String? nextCursor})> page(
@@ -124,9 +223,56 @@ final class LedgerLocalDataSource {
     final items = rows.take(query.limit).map(_toEntity).toList();
     return (
       items: items,
-      nextCursor: hasMore ? _encodeCursor(items.last) : null,
+      nextCursor: hasMore ? encodeCursor(items.last) : null,
     );
   }
+
+  /// Drops what no screen needs anymore, so the cache does not grow with
+  /// use: keeps the [keepNewest] newest, the dashboard period, the pending
+  /// debits and the [keepOpened] details opened lately.
+  Future<void> prune() => _db.transaction(() async {
+    final state = await readDashboardState();
+    final keep = <String>{
+      ...?state?.pendingIds,
+      ...await _ids(
+        _db.select(_db.transactions)
+          ..orderBy(_pagingOrder)
+          ..limit(keepNewest),
+      ),
+      ...await _ids(
+        _db.select(_db.transactions)
+          ..where((t) => t.openedAtMicros.isNotNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.openedAtMicros)])
+          ..limit(keepOpened),
+      ),
+    };
+    final period = state == null
+        ? null
+        : _calendar.rangeOf(state.period.first, state.period.last);
+    await (_db.delete(_db.transactions)..where((t) {
+          final notKept = t.id.isNotIn(keep);
+          if (period == null) return notKept;
+          return notKept &
+              (t.occurredAtMicros.isSmallerThanValue(
+                    period.start.microsecondsSinceEpoch,
+                  ) |
+                  t.occurredAtMicros.isBiggerOrEqualValue(
+                    period.end.microsecondsSinceEpoch,
+                  ));
+        }))
+        .go();
+  });
+
+  /// Deletes everything (sign out).
+  Future<void> clear() => _db.transaction(() async {
+    for (final table in _db.allTables) {
+      await _db.delete(table).go();
+    }
+  });
+
+  Future<List<String>> _ids(
+    SimpleSelectStatement<$TransactionsTable, TransactionRow> select,
+  ) async => [for (final row in await select.get()) row.id];
 
   Expression<bool> _conditions(
     $TransactionsTable t,
@@ -190,6 +336,14 @@ final class LedgerLocalDataSource {
     TransactionType.expense => 'debit',
   };
 
+  static LocalDate _date(String iso) {
+    final parts = iso.split('-').map(int.parse).toList();
+    return LocalDate(parts[0], parts[1], parts[2]);
+  }
+
+  static DateTime _instant(int micros) =>
+      DateTime.fromMicrosecondsSinceEpoch(micros, isUtc: true);
+
   static TransactionsCompanion _toRow(Transaction transaction) {
     final dto = TransactionMapper.fromEntity(transaction);
     return TransactionsCompanion.insert(
@@ -201,12 +355,29 @@ final class LedgerLocalDataSource {
       occurredAtMicros: dto.occurredAt.microsecondsSinceEpoch,
       paymentMethod: dto.paymentMethod,
       category: dto.category ?? 'other',
-      cardLast4: Value(dto.cardLast4),
       counterparty: Value(dto.counterparty),
-      message: Value(dto.message),
       searchText: SearchText.normalize(
         '${transaction.description} ${transaction.counterparty ?? ''}',
       ),
+      cardLast4: Value(dto.cardLast4),
+      message: Value(dto.message),
+      detailed: Value(transaction.detailed),
+    );
+  }
+
+  /// The columns a list item may update on a row that is already saved.
+  static TransactionsCompanion _summaryOnly(Transaction transaction) {
+    final row = _toRow(transaction);
+    return TransactionsCompanion(
+      description: row.description,
+      amountCents: row.amountCents,
+      direction: row.direction,
+      status: row.status,
+      occurredAtMicros: row.occurredAtMicros,
+      paymentMethod: row.paymentMethod,
+      category: row.category,
+      counterparty: row.counterparty,
+      searchText: row.searchText,
     );
   }
 
@@ -220,19 +391,18 @@ final class LedgerLocalDataSource {
           amountCents: row.amountCents,
           direction: row.direction,
           status: row.status,
-          occurredAt: DateTime.fromMicrosecondsSinceEpoch(
-            row.occurredAtMicros,
-            isUtc: true,
-          ),
+          occurredAt: _instant(row.occurredAtMicros),
           paymentMethod: row.paymentMethod,
           category: row.category,
           cardLast4: row.cardLast4,
           counterparty: row.counterparty,
           message: row.message,
         ),
+        detailed: row.detailed,
       );
 
-  static String _encodeCursor(Transaction last) => base64Url.encode(
+  /// Same format the server uses: `<occurred at micros>|<id>`, base64.
+  static String encodeCursor(Transaction last) => base64Url.encode(
     utf8.encode('${last.occurredAt.microsecondsSinceEpoch}|${last.id}'),
   );
 

@@ -42,6 +42,7 @@ final class Transaction {
     this.cardLastDigits,
     this.counterparty,
     this.message,
+    this.detailed = true,
   }) : occurredAt = occurredAt.toUtc() {
     if (id.trim().isEmpty) {
       throw ArgumentError.value(id, 'id', 'must not be empty');
@@ -80,6 +81,26 @@ final class Transaction {
   /// Free text attached by the sender, e.g. a Pix message.
   final String? message;
 
+  /// False when only the summary sent by the list is known: [cardLastDigits]
+  /// and [message] arrive with the detail endpoint.
+  final bool detailed;
+
+  /// Same transaction with what the detail endpoint adds.
+  Transaction withDetails({String? cardLastDigits, String? message}) =>
+      Transaction(
+        id: id,
+        description: description,
+        amount: amount,
+        type: type,
+        status: status,
+        occurredAt: occurredAt,
+        method: method,
+        category: category,
+        cardLastDigits: cardLastDigits,
+        counterparty: counterparty,
+        message: message,
+      );
+
   bool get isIncome => type == TransactionType.income;
 
   bool get isExpense => type == TransactionType.expense;
@@ -100,7 +121,8 @@ final class Transaction {
       other.category == category &&
       other.cardLastDigits == cardLastDigits &&
       other.counterparty == counterparty &&
-      other.message == message;
+      other.message == message &&
+      other.detailed == detailed;
 
   @override
   int get hashCode => Object.hash(
@@ -115,6 +137,7 @@ final class Transaction {
     cardLastDigits,
     counterparty,
     message,
+    detailed,
   );
 
   @override

@@ -8,7 +8,7 @@ import '../entities/transaction.dart';
 final class BalanceBreakdown {
   const BalanceBreakdown({required this.posted, required this.pendingDebits});
 
-  /// Opening balance plus every completed movement.
+  /// Opening balance plus every completed movement, from the server.
   final Money posted;
 
   /// Expenses authorized but not settled yet (e.g. a card purchase still
@@ -35,31 +35,28 @@ final class BalanceBreakdown {
 
 /// Balance rules, kept out of the UI and covered by tests.
 ///
+/// The server owns the money: it sends the settled balance (opening balance
+/// plus every completed movement). The app turns it into what the customer
+/// can spend, following the status of each pending transaction:
+///
 /// | status    | income            | expense                    |
 /// |-----------|-------------------|----------------------------|
-/// | completed | adds to posted    | subtracts from posted      |
+/// | completed | already settled   | already settled            |
 /// | pending   | ignored (not yet) | reserved: lowers available |
 /// | failed    | ignored           | ignored                    |
 /// | reversed  | ignored (undone)  | ignored (money returned)   |
 abstract final class BalanceCalculator {
   static BalanceBreakdown compute({
-    required Money openingBalance,
-    required Iterable<Transaction> transactions,
+    required Money settled,
+    required Iterable<Transaction> pending,
   }) {
-    var posted = openingBalance;
-    var pendingDebits = Money.zero;
-    for (final transaction in transactions) {
-      switch (transaction.status) {
-        case TransactionStatus.completed:
-          posted += transaction.signedAmount;
-        case TransactionStatus.pending when transaction.isExpense:
-          pendingDebits += transaction.amount;
-        case TransactionStatus.pending:
-        case TransactionStatus.failed:
-        case TransactionStatus.reversed:
-          break;
+    var reserved = Money.zero;
+    for (final transaction in pending) {
+      if (transaction.status == TransactionStatus.pending &&
+          transaction.isExpense) {
+        reserved += transaction.amount;
       }
     }
-    return BalanceBreakdown(posted: posted, pendingDebits: pendingDebits);
+    return BalanceBreakdown(posted: settled, pendingDebits: reserved);
   }
 }

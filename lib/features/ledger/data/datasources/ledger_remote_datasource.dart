@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../../../core/network/request_deduplicator.dart';
 import '../../../../core/time/local_calendar.dart';
 import '../../domain/entities/transaction.dart';
+import '../../domain/entities/transaction_filter.dart';
 import '../../domain/entities/transaction_page.dart';
 import '../dtos/transaction_dto.dart';
 
@@ -22,9 +23,13 @@ abstract interface class LedgerRemoteDataSource {
     CancelToken? cancelToken,
   });
 
-  /// Unfiltered page used to copy the whole account to the local database.
-  /// Bigger than a screen page, so a full sync needs few requests.
-  Future<TransactionPageDto> fetchSyncPage({String? cursor, int limit});
+  /// A big page of [filter], for loading a whole period (dashboard totals)
+  /// in few requests.
+  Future<TransactionPageDto> fetchBulkPage(
+    TransactionFilter filter, {
+    String? cursor,
+    CancelToken? cancelToken,
+  });
 }
 
 final class DioLedgerRemoteDataSource implements LedgerRemoteDataSource {
@@ -66,18 +71,24 @@ final class DioLedgerRemoteDataSource implements LedgerRemoteDataSource {
   );
 
   @override
-  Future<TransactionPageDto> fetchSyncPage({
+  Future<TransactionPageDto> fetchBulkPage(
+    TransactionFilter filter, {
     String? cursor,
-    int limit = syncPageSize,
+    CancelToken? cancelToken,
   }) async => TransactionPageDto.fromJson(
     await _get(
       '/v1/transactions',
-      query: {'limit': '$limit', 'cursor': ?cursor},
+      query: {
+        ...encodeFilter(filter, _calendar),
+        'limit': '$bulkPageSize',
+        'cursor': ?cursor,
+      },
+      cancelToken: cancelToken,
     ),
   );
 
   /// The server accepts up to 500 per page.
-  static const syncPageSize = 500;
+  static const bulkPageSize = 500;
 
   Future<Object?> _get(
     String path, {
@@ -105,15 +116,21 @@ final class DioLedgerRemoteDataSource implements LedgerRemoteDataSource {
   static Map<String, String> encodeQuery(
     TransactionQuery query,
     LocalCalendar calendar,
+  ) => {
+    'limit': '${query.limit}',
+    'cursor': ?query.cursor,
+    ...encodeFilter(query.filter, calendar),
+  };
+
+  static Map<String, String> encodeFilter(
+    TransactionFilter filter,
+    LocalCalendar calendar,
   ) {
-    final filter = query.filter;
     final period = filter.period;
     final range = period == null
         ? null
         : calendar.rangeOf(period.first, period.last);
     return {
-      'limit': '${query.limit}',
-      'cursor': ?query.cursor,
       if (filter.types.isNotEmpty)
         'type': (filter.types.map(_typeName).toList()..sort()).join(','),
       if (filter.statuses.isNotEmpty)

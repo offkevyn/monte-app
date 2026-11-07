@@ -54,6 +54,7 @@ final class TransactionPage {
     required List<Transaction> items,
     required this.nextCursor,
     required this.freshness,
+    this.fromDevice = false,
   }) : items = List.unmodifiable(items);
 
   final List<Transaction> items;
@@ -61,6 +62,10 @@ final class TransactionPage {
   /// `null` when there is nothing after this page.
   final String? nextCursor;
   final DataFreshness freshness;
+
+  /// Read from what is saved on the device because the server could not be
+  /// reached: it may miss transactions that were never downloaded.
+  final bool fromDevice;
 
   bool get hasMore => nextCursor != null;
 }

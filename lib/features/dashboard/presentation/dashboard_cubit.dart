@@ -59,8 +59,9 @@ final class DashboardState extends Equatable {
   ];
 }
 
-/// ViewModel of the dashboard. All numbers come from `GetDashboard`, which
-/// computes them from the same local snapshot the statement reads.
+/// ViewModel of the dashboard. Shows what is saved on the device right
+/// away, then what the server says (thin bar at the top meanwhile). All
+/// numbers come from `GetDashboard`, which applies the domain rules.
 class DashboardCubit extends Cubit<DashboardState> {
   DashboardCubit(this._getDashboard, this._preferences, this._biometrics)
     : super(const DashboardState());
@@ -70,26 +71,45 @@ class DashboardCubit extends Cubit<DashboardState> {
   final BiometricAuthenticator _biometrics;
 
   Future<void> load() async {
-    emit(
-      state.copyWith(
-        balanceHidden: await _preferences.hideBalance(),
-        status: state.summary == null ? DashboardStatus.loading : null,
-      ),
-    );
+    emit(state.copyWith(balanceHidden: await _preferences.hideBalance()));
+    await _showSaved();
     await _fetch();
   }
 
   /// Pull to refresh: always asks the server.
   Future<void> refresh() async {
     if (state.refreshing) return;
-    emit(state.copyWith(refreshing: true));
-    await _fetch(forceRefresh: true);
+    await _fetch(force: true);
+  }
+
+  /// Coming back to the app or to this tab. The repository skips the
+  /// network when it fetched seconds ago.
+  Future<void> refreshIfNeeded() async {
+    if (state.refreshing || isClosed) return;
+    await _fetch();
   }
 
   Future<void> selectPeriod(PeriodPreset preset) async {
     if (preset == state.preset) return;
     emit(state.copyWith(preset: preset));
+    await _showSaved();
     await _fetch();
+  }
+
+  Future<void> _showSaved() async {
+    final saved = await _getDashboard.saved(preset: state.preset);
+    if (isClosed) return;
+    if (saved case Ok(value: final summary?)) {
+      emit(
+        state.copyWith(
+          status: DashboardStatus.ready,
+          summary: summary,
+          failure: () => null,
+        ),
+      );
+    } else if (state.summary == null) {
+      emit(state.copyWith(status: DashboardStatus.loading));
+    }
   }
 
   /// Eye button. Revealing may ask for the fingerprint, when the customer
@@ -106,11 +126,9 @@ class DashboardCubit extends Cubit<DashboardState> {
     await _preferences.setHideBalance(hidden: !reveal);
   }
 
-  Future<void> _fetch({bool forceRefresh = false}) async {
-    final result = await _getDashboard(
-      preset: state.preset,
-      forceRefresh: forceRefresh,
-    );
+  Future<void> _fetch({bool force = false}) async {
+    if (state.summary != null) emit(state.copyWith(refreshing: true));
+    final result = await _getDashboard(preset: state.preset, force: force);
     if (isClosed) return;
     switch (result) {
       case Ok(value: final summary):

@@ -19,6 +19,7 @@ extension FakeScenarioLabel on FakeScenario {
 
 extension FakeVolumeLabel on FakeVolume {
   String get label => switch (this) {
+    FakeVolume.tiny => '3',
     FakeVolume.small => '50',
     FakeVolume.medium => '500',
     FakeVolume.large => '10 mil',

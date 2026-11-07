@@ -34,19 +34,23 @@ abstract final class TransactionMapper {
   };
 
   /// Throws [FormatException] or [ArgumentError] for invalid records.
-  static Transaction toEntity(TransactionDto dto) => Transaction(
-    id: dto.id,
-    description: dto.description.trim(),
-    amount: Money.cents(dto.amountCents),
-    type: _lookup(_directions, dto.direction, 'direction'),
-    status: _lookup(_statuses, dto.status, 'status'),
-    occurredAt: dto.occurredAt,
-    method: _lookup(_methods, dto.paymentMethod, 'payment_method'),
-    category: _categories[dto.category] ?? TransactionCategory.other,
-    cardLastDigits: dto.cardLast4,
-    counterparty: dto.counterparty?.trim(),
-    message: dto.message?.trim(),
-  );
+  ///
+  /// [detailed] is false for list items, which carry only the summary.
+  static Transaction toEntity(TransactionDto dto, {bool detailed = true}) =>
+      Transaction(
+        id: dto.id,
+        description: dto.description.trim(),
+        amount: Money.cents(dto.amountCents),
+        type: _lookup(_directions, dto.direction, 'direction'),
+        status: _lookup(_statuses, dto.status, 'status'),
+        occurredAt: dto.occurredAt,
+        method: _lookup(_methods, dto.paymentMethod, 'payment_method'),
+        category: _categories[dto.category] ?? TransactionCategory.other,
+        cardLastDigits: dto.cardLast4,
+        counterparty: dto.counterparty?.trim(),
+        message: dto.message?.trim(),
+        detailed: detailed,
+      );
 
   /// Maps a page, dropping (and counting) records that are invalid.
   static ({List<Transaction> items, int skipped}) toEntities(
@@ -56,7 +60,7 @@ abstract final class TransactionMapper {
     var skipped = page.skippedItems;
     for (final dto in page.items) {
       try {
-        items.add(toEntity(dto));
+        items.add(toEntity(dto, detailed: false));
       } on FormatException {
         skipped++;
       } on ArgumentError {
@@ -82,11 +86,11 @@ abstract final class TransactionMapper {
 
   /// Only Brazilian reais are supported; anything else is rejected rather
   /// than shown with the wrong symbol.
-  static Money openingBalance(AccountDto dto) {
+  static Money balance(AccountDto dto) {
     if (dto.currency != 'BRL') {
       throw FormatException('Unsupported currency', dto.currency);
     }
-    return Money.cents(dto.openingBalanceCents);
+    return Money.cents(dto.balanceCents);
   }
 
   static T _lookup<T>(Map<String, T> table, String value, String field) =>

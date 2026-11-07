@@ -112,8 +112,9 @@ class AppModule extends Module {
           Modular.get<CurrentSession>(),
         ),
       )
-      // Ledger: one encrypted database, one repository (single source of
-      // truth for dashboard, statement and detail).
+      // Ledger: the server answers each screen with what it shows; one
+      // encrypted database keeps those answers (single source of truth for
+      // dashboard, statement and detail).
       ..addLazySingleton<LedgerDatabase>(
         () => openLedgerDatabase(Modular.get<DatabaseKeyProvider>()),
       )
@@ -148,14 +149,12 @@ class AppModule extends Module {
       ..add<GetStatementPage>(
         () => GetStatementPage(Modular.get<LedgerRepository>()),
       )
-      ..add<RefreshLedger>(() => RefreshLedger(Modular.get<LedgerRepository>()))
       ..add<CountTransactions>(
         () => CountTransactions(Modular.get<LedgerRepository>()),
       )
       ..add<StatementBloc>(
         () => StatementBloc(
           Modular.get<GetStatementPage>(),
-          Modular.get<RefreshLedger>(),
           Modular.get<LocalCalendar>(),
         ),
       )

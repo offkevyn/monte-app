@@ -33,8 +33,9 @@ abstract final class FakeLedgerGenerator {
       return const FakeLedgerData(openingBalance: Money.zero, transactions: []);
     }
     final random = Random(seed);
-    // About four movements a day, at least a month of history.
-    final days = max(30, count ~/ 4);
+    // About four movements a day, at least a month of history; a brand new
+    // account (a handful of movements) only has the last few days.
+    final days = count < 10 ? 3 : max(30, count ~/ 4);
     final start = nowUtc.subtract(Duration(days: days));
     final usedIds = <String>{};
     final transactions = <Transaction>[];

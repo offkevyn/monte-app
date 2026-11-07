@@ -13,6 +13,8 @@ import '../../../core/theme/monte_theme.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../../../core/ui/monte_logo.dart';
 import '../../auth/presentation/current_session.dart';
+import '../../ledger/data/fake/fake_ledger_server.dart';
+import '../../ledger/domain/repositories/ledger_repository.dart';
 import 'profile_cubit.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -20,7 +22,9 @@ class ProfilePage extends StatelessWidget {
 
   /// Called after the dev scenario picker changed something, so the signed
   /// in screens load again under the new scenario.
-  final VoidCallback onDataReset;
+  /// Called after the dev picker changed the simulated bank, with whether
+  /// the saved data must go (new volume = different transactions).
+  final ValueChanged<bool> onDataReset;
 
   @override
   Widget build(BuildContext context) {
@@ -36,9 +40,21 @@ class ProfilePage extends StatelessWidget {
             ? Modular.get<FakeBackendSettings>()
             : null,
         onDataReset: onDataReset,
+        onSimulatePix: _simulatePix,
       ),
     );
   }
+}
+
+/// Dev tool: a Pix arrives at the fake bank in a few seconds, time to go
+/// down the statement and leave the app, so coming back shows the "new
+/// transaction" pill. The "fetched seconds ago" shortcut is dropped, as a
+/// push notification would, so the next look goes to the server.
+void _simulatePix() {
+  Future<void>.delayed(ProfileView.pixDelay, () {
+    Modular.get<FakeLedgerServer>().receivePix();
+    Modular.get<LedgerRepository>().expireRecentFetches();
+  });
 }
 
 /// Public so widget tests can pump it with a cubit of their own.
@@ -51,10 +67,14 @@ class ProfileView extends StatefulWidget {
     required this.links,
     this.devSettings,
     this.onDataReset,
+    this.onSimulatePix,
     this.onSignedOut = _goToLogin,
   });
 
   static final github = Uri.parse('https://github.com/offkevyn');
+
+  /// How long the simulated Pix takes to arrive.
+  static const pixDelay = Duration(seconds: 10);
 
   final String customerName;
   final String accountLabel;
@@ -63,7 +83,11 @@ class ProfileView extends StatefulWidget {
 
   /// Present only in dev builds: shows the scenario picker row.
   final FakeBackendSettings? devSettings;
-  final VoidCallback? onDataReset;
+  final ValueChanged<bool>? onDataReset;
+
+  /// Makes a Pix arrive at the fake bank; shown next to the scenario
+  /// picker, so only in dev builds.
+  final VoidCallback? onSimulatePix;
   final VoidCallback onSignedOut;
 
   static void _goToLogin() => Modular.to.navigate(Routes.login);
@@ -89,10 +113,13 @@ class _ProfileViewState extends State<ProfileView> {
   }
 
   Future<void> _openScenarios(FakeBackendSettings settings) async {
+    final volume = settings.volume;
     final changed = await showScenarioPicker(context, settings);
     if (!mounted) return;
     setState(() {});
-    if (changed) widget.onDataReset?.call();
+    // A new scenario keeps what is saved (so "Sem internet" shows the
+    // offline screens with data); a new volume is another account.
+    if (changed) widget.onDataReset?.call(settings.volume != volume);
   }
 
   Future<void> _signOut() async {
@@ -269,6 +296,30 @@ class _ProfileViewState extends State<ProfileView> {
                     onTap: () => _openScenarios(devSettings),
                   ),
                 ),
+                if (widget.onSimulatePix case final simulatePix?)
+                  _Card(
+                    child: ListTile(
+                      key: const Key('profile.devPix'),
+                      leading: const Icon(Icons.pix_rounded),
+                      title: const Text('Simular Pix recebido'),
+                      subtitle: const Text(
+                        'R\$ 50,00 chegam no servidor falso em 10 s',
+                      ),
+                      onTap: () {
+                        simulatePix();
+                        ScaffoldMessenger.of(context)
+                          ..hideCurrentSnackBar()
+                          ..showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Pix de R\$ 50,00 chega em 10 s. Role o '
+                                'extrato pra baixo, minimize e volte.',
+                              ),
+                            ),
+                          );
+                      },
+                    ),
+                  ),
               ],
               const SizedBox(height: 24),
               Center(

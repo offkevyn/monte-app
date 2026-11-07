@@ -1,9 +1,11 @@
+import 'package:monte/core/async/cancel_signal.dart';
 import 'package:monte/core/failures/failure.dart';
 import 'package:monte/core/freshness/data_freshness.dart';
 import 'package:monte/core/money/money.dart';
 import 'package:monte/core/result/result.dart';
 import 'package:monte/core/time/local_calendar.dart';
-import 'package:monte/features/ledger/domain/entities/ledger_snapshot.dart';
+import 'package:monte/features/ledger/domain/entities/dashboard_snapshot.dart';
+import 'package:monte/features/ledger/domain/entities/date_span.dart';
 import 'package:monte/features/ledger/domain/entities/transaction.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_page.dart';
@@ -25,10 +27,19 @@ class MemoryLedgerRepository implements LedgerRepository {
   Failure? failWith;
   final freshness = DataFreshness(syncedAt: DateTime.utc(2026, 11, 5, 17));
 
+  /// What [savedFirstPage] answers; `null` means nothing saved.
+  TransactionPage? saved;
+
+  /// Every query sent to [getPage], with its options.
+  final pageCalls = <({TransactionQuery query, bool force})>[];
+
   @override
-  Future<Result<TransactionPage>> getTransactions(
-    TransactionQuery query,
-  ) async {
+  Future<Result<TransactionPage>> getPage(
+    TransactionQuery query, {
+    bool force = false,
+    CancelSignal? cancel,
+  }) async {
+    pageCalls.add((query: query, force: force));
     final failure = failWith;
     if (failure != null) return Err(failure);
     final matching = transactions
@@ -46,11 +57,30 @@ class MemoryLedgerRepository implements LedgerRepository {
   }
 
   @override
-  Future<Result<int>> countTransactions(TransactionFilter filter) async =>
-      Ok(transactions.where((t) => filter.matches(t, calendar)).length);
+  Future<Result<TransactionPage?>> savedFirstPage(
+    TransactionFilter filter,
+  ) async => Ok(saved);
 
   @override
-  Future<Result<Transaction>> getTransaction(String id) async {
+  Future<Result<int>> countTransactions(
+    TransactionFilter filter, {
+    CancelSignal? cancel,
+  }) async => Ok(transactions.where((t) => filter.matches(t, calendar)).length);
+
+  /// When true, [savedTransaction] finds nothing, as on a fresh install.
+  bool nothingSaved = false;
+
+  @override
+  Future<Result<Transaction?>> savedTransaction(String id) async {
+    if (nothingSaved) return const Ok(null);
+    for (final transaction in transactions) {
+      if (transaction.id == id) return Ok(transaction);
+    }
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<Transaction>> refreshTransaction(String id) async {
     final failure = failWith;
     if (failure != null) return Err(failure);
     for (final transaction in transactions) {
@@ -59,16 +89,27 @@ class MemoryLedgerRepository implements LedgerRepository {
     return const Err(NotFoundFailure());
   }
 
-  @override
-  Future<Result<LedgerSnapshot>> loadSnapshot({
-    bool forceRefresh = false,
-  }) async => Ok(
-    LedgerSnapshot(
-      openingBalance: Money.zero,
-      transactions: transactions,
-      freshness: freshness,
-    ),
+  DashboardSnapshot _dashboard(DateSpan period) => DashboardSnapshot(
+    settledBalance: Money.zero,
+    pendingDebits: const [],
+    recent: transactions.take(5).toList(),
+    period: period,
+    periodTransactions: transactions,
+    freshness: freshness,
   );
+
+  @override
+  Future<Result<DashboardSnapshot?>> savedDashboard(DateSpan period) async =>
+      Ok(_dashboard(period));
+
+  @override
+  Future<Result<DashboardSnapshot>> refreshDashboard(
+    DateSpan period, {
+    bool force = false,
+  }) async => Ok(_dashboard(period));
+
+  @override
+  void expireRecentFetches() {}
 
   @override
   Future<void> clear() async {}

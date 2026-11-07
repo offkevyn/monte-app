@@ -41,6 +41,7 @@ void main() {
   late ProfileCubit cubit;
   late int signedOut;
   late int dataResets;
+  late List<bool> clears;
 
   setUp(() {
     preferences = MemoryAppPreferences();
@@ -49,6 +50,7 @@ void main() {
     links = _FakeLinks();
     signedOut = 0;
     dataResets = 0;
+    clears = [];
     final ledger = _MockLedger();
     final market = _MockMarket();
     when(ledger.clear).thenAnswer((_) async {});
@@ -65,6 +67,9 @@ void main() {
   });
 
   tearDown(() => cubit.close());
+
+  var pixes = 0;
+  setUp(() => pixes = 0);
 
   Future<void> pump(WidgetTester tester, {FakeBackendSettings? dev}) async {
     tester.view.physicalSize = const Size(1080, 2400);
@@ -83,7 +88,11 @@ void main() {
               theme: theme,
               links: links,
               devSettings: dev,
-              onDataReset: () => dataResets++,
+              onSimulatePix: () => pixes++,
+              onDataReset: (clear) {
+                dataResets++;
+                clears.add(clear);
+              },
               onSignedOut: () => signedOut++,
             ),
           ),
@@ -105,6 +114,18 @@ void main() {
     expect(find.text('Conta 0001 · 12345-6'), findsOneWidget);
     expect(find.text('1.0.0'), findsOneWidget);
     expect(find.byKey(const Key('profile.devScenarios')), findsNothing);
+    expect(find.byKey(const Key('profile.devPix')), findsNothing);
+  });
+
+  testWidgets('dev builds can make a Pix arrive', (tester) async {
+    await pump(tester, dev: FakeBackendSettings());
+    await tester.tap(find.byKey(const Key('profile.devPix')));
+    await tester.pump();
+    expect(pixes, 1);
+    expect(
+      find.textContaining('Pix de R\$ 50,00 chega em 10 s'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the switches follow the cubit', (tester) async {
@@ -198,5 +219,13 @@ void main() {
     expect(settings.scenario, FakeScenario.slow);
     expect(find.text('Lento (3 s) · 500 transações'), findsOneWidget);
     expect(dataResets, 1);
+    expect(clears, [false], reason: 'a new scenario keeps what is saved');
+
+    await tester.tap(find.byKey(const Key('profile.devScenarios')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('dev.volume.large')));
+    await tester.tap(find.byKey(const Key('dev.apply')));
+    await tester.pumpAndSettle();
+    expect(clears, [false, true], reason: 'a new volume is another account');
   });
 }

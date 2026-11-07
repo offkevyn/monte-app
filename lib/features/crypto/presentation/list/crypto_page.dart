@@ -90,6 +90,15 @@ class _CryptoViewState extends State<CryptoView> {
               _header(context),
               _searchField(context),
               if (!state.searching) _tabs(state, cubit),
+              SizedBox(
+                height: 2,
+                child: state.refreshing && state.coins.isNotEmpty
+                    ? const LinearProgressIndicator(
+                        key: Key('crypto.refreshing'),
+                        minHeight: 2,
+                      )
+                    : null,
+              ),
               Expanded(
                 child: NotificationListener<ScrollNotification>(
                   onNotification: _onScroll,

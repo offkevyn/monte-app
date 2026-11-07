@@ -12,6 +12,7 @@ import 'package:monte/core/time/clock.dart';
 import 'package:monte/core/time/date_labels.dart';
 import 'package:monte/core/time/local_calendar.dart';
 import 'package:monte/core/time/local_date.dart';
+import 'package:monte/core/ui/on_visit.dart';
 import 'package:monte/features/ledger/domain/entities/date_span.dart';
 import 'package:monte/features/ledger/domain/entities/transaction.dart';
 import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
@@ -50,13 +51,17 @@ void main() {
     late List<String> opened;
     TransactionFilter? sheetAnswer;
 
-    Future<StatementBloc> pump(WidgetTester tester) async {
+    Future<StatementBloc> pump(
+      WidgetTester tester, {
+      Stream<Visit>? visits,
+      int maxItems = 200,
+    }) async {
       opened = [];
       final bloc = StatementBloc(
         GetStatementPage(repository),
-        RefreshLedger(repository),
         calendar,
         debounce: const Duration(milliseconds: 50),
+        maxItems: maxItems,
       )..add(const StatementStarted());
       // The provider owns the bloc, like in the app. Awaiting close() here
       // would hang: under the fake clock of widget tests, cancelling the
@@ -69,6 +74,7 @@ void main() {
             body: BlocProvider(
               create: (_) => bloc,
               child: StatementView(
+                visits: visits,
                 money: money,
                 dates: dates,
                 onOpenDetail: opened.add,
@@ -128,6 +134,70 @@ void main() {
       expect(find.text('Isso é tudo por aqui.'), findsOneWidget);
     });
 
+    testWidgets('at the limit the footer points to search and filters', (
+      tester,
+    ) async {
+      final bloc = await pump(tester, maxItems: 40);
+      for (var i = 0; i < 12; i++) {
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+        await tester.pumpAndSettle();
+      }
+      expect(bloc.state.items, hasLength(40));
+      expect(find.byKey(const Key('statement.limit')), findsOneWidget);
+      expect(
+        find.text(
+          'Pra ver transações mais antigas, use a busca ou o filtro de '
+          'período.',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('picking the tab again goes back to the top', (tester) async {
+      final visits = StreamController<Visit>.broadcast();
+      addTearDown(visits.close);
+      final bloc = await pump(tester, visits: visits.stream);
+      for (var i = 0; i < 3; i++) {
+        await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+        await tester.pumpAndSettle();
+      }
+      expect(bloc.state.items.length, greaterThan(20));
+
+      visits.add(Visit.tab);
+      await tester.pumpAndSettle();
+      expect(bloc.state.items, hasLength(20));
+      expect(find.text('Mercado 1'), findsOneWidget, reason: 'top row shown');
+    });
+
+    testWidgets('news while down the list wait behind the pill', (
+      tester,
+    ) async {
+      final visits = StreamController<Visit>.broadcast();
+      addTearDown(visits.close);
+      final bloc = await pump(tester, visits: visits.stream);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -900));
+      await tester.pumpAndSettle();
+
+      repository.transactions.insert(
+        0,
+        tx(
+          id: 'pix',
+          description: 'Pix da Ana',
+          at: DateTime.utc(2026, 11, 5, 18),
+        ),
+      );
+      visits.add(Visit.resume);
+      await tester.pumpAndSettle();
+      expect(bloc.state.items.first.id, 'tx_0', reason: 'rows did not move');
+      expect(find.text('1 nova transação'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('statement.newOnTop')));
+      await tester.pumpAndSettle();
+      expect(bloc.state.items.first.id, 'pix');
+      expect(find.text('Pix da Ana'), findsOneWidget);
+      expect(find.byKey(const Key('statement.newOnTop')), findsNothing);
+    });
+
     testWidgets('filters from the sheet become removable chips', (
       tester,
     ) async {
@@ -179,7 +249,9 @@ void main() {
       await pump(tester);
       expect(find.text('Tentar de novo'), findsOneWidget);
 
-      repository.failWith = null;
+      repository
+        ..failWith = null
+        ..nothingSaved = false;
       await tester.tap(find.text('Tentar de novo'));
       await tester.pumpAndSettle();
       expect(find.text('Mercado 0'), findsOneWidget);
@@ -359,11 +431,22 @@ void main() {
       expect(find.text('Voltar'), findsOneWidget);
     });
 
-    testWidgets('other failures can retry', (tester) async {
+    testWidgets('offline, what was saved still shows', (tester) async {
       repository.failWith = const NoConnectionFailure();
       await pump(tester, pix.id);
+      expect(find.text('Ana Souza'), findsOneWidget);
+      expect(find.text('Tentar de novo'), findsNothing);
+    });
+
+    testWidgets('other failures can retry', (tester) async {
+      repository
+        ..failWith = const NoConnectionFailure()
+        ..nothingSaved = true;
+      await pump(tester, pix.id);
       expect(find.text('Tentar de novo'), findsOneWidget);
-      repository.failWith = null;
+      repository
+        ..failWith = null
+        ..nothingSaved = false;
       await tester.tap(find.text('Tentar de novo'));
       await tester.pumpAndSettle();
       expect(find.text('Ana Souza'), findsOneWidget);
