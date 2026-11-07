@@ -82,10 +82,20 @@ class TransactionDetailView extends StatelessWidget {
               ? null
               : () => context.read<TransactionDetailCubit>().load(id),
         ),
-        DetailLoaded(:final transaction) => _Details(
-          transaction: transaction,
-          money: money,
-          dates: dates,
+        final DetailLoaded loaded => Stack(
+          children: [
+            _Details(
+              transaction: loaded.transaction,
+              money: money,
+              dates: dates,
+              missingDetails: loaded.missingDetails,
+            ),
+            if (loaded.refreshing)
+              const LinearProgressIndicator(
+                key: Key('detail.refreshing'),
+                minHeight: 2,
+              ),
+          ],
         ),
       },
     ),
@@ -97,9 +107,11 @@ class _Details extends StatelessWidget {
     required this.transaction,
     required this.money,
     required this.dates,
+    required this.missingDetails,
   });
 
   final Transaction transaction;
+  final bool missingDetails;
   final MoneyFormatter money;
   final DateLabels dates;
 
@@ -235,7 +247,12 @@ class _Details extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          ['Horário local do aparelho.', ?note].join(' '),
+          [
+            'Horário local do aparelho.',
+            ?note,
+            if (missingDetails)
+              'Sem conexão: alguns detalhes aparecem quando a internet voltar.',
+          ].join(' '),
           style: text.bodySmall?.copyWith(color: colors.subtle),
         ),
         const SizedBox(height: 16),
