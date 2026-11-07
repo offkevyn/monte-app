@@ -25,6 +25,10 @@ enum FakeScenario {
 
   /// Login always rejects the password.
   wrongPassword,
+
+  /// The bank rejects every token (HTTP 401), as when the session expired
+  /// or was revoked on the server: the app signs out and asks for login.
+  sessionExpired,
 }
 
 /// How many transactions the simulated account has.

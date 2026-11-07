@@ -17,9 +17,17 @@ import 'fake_ledger_generator.dart';
 /// statement shows) and the total of matches; the full record comes from
 /// the detail endpoint, so each screen downloads only what it uses.
 final class FakeLedgerServer {
-  FakeLedgerServer({required this.settings, required this._clock}) {
+  FakeLedgerServer({
+    required this.settings,
+    required this._clock,
+    this.authorize,
+  }) {
     settings.addDataListener(() => _data = null);
   }
+
+  /// Checks the session token of each request; without it (tests of the
+  /// ledger alone) every request is accepted.
+  final bool Function(FakeRequest request)? authorize;
 
   static const maxLimit = 500;
 
@@ -60,10 +68,19 @@ final class FakeLedgerServer {
   }
 
   List<FakeRoute> get routes => [
-    FakeRoute('GET', '/v1/account', _account),
-    FakeRoute('GET', '/v1/transactions', _list),
-    FakeRoute('GET', '/v1/transactions/:id', _byId),
+    FakeRoute('GET', '/v1/account', _guard(_account)),
+    FakeRoute('GET', '/v1/transactions', _guard(_list)),
+    FakeRoute('GET', '/v1/transactions/:id', _guard(_byId)),
   ];
+
+  /// Every bank endpoint answers 401 to a request without a valid session.
+  FakeHandler _guard(FakeHandler handler) => (request) {
+    final check = authorize;
+    if (check != null && !check(request)) {
+      return FakeResponse.error(401, 'unauthorized');
+    }
+    return handler(request);
+  };
 
   bool get _isEmpty => settings.scenario == FakeScenario.empty;
 

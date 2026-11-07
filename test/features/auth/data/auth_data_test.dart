@@ -54,7 +54,7 @@ void main() {
     expect(session.customerName, 'Kevyn Melo');
     expect(session.accountLabel, 'Conta 0001 · 12345-6');
     expect(session.expiresAt, clock.nowUtc().add(const Duration(hours: 12)));
-    expect(session.accessToken, startsWith('demo_'));
+    expect(session.accessToken, matches(RegExp(r'^monte_\d+_[0-9a-f]{32}$')));
     expect(await repository.storedSession(), session);
     expect(await repository.lastCpf(), demo);
   });
@@ -149,6 +149,59 @@ void main() {
   test('a garbled stored CPF is ignored', () async {
     store.values['monte.last_cpf.v1'] = 'abc';
     expect(await repository.lastCpf(), isNull);
+  });
+
+  group('session token check (bank endpoints)', () {
+    late FakeAuthServer server;
+
+    setUp(() {
+      server = FakeAuthServer(
+        settings: settings,
+        clock: clock,
+        random: Random(2),
+      );
+    });
+
+    FakeRequest withToken(String? token) => FakeRequest(
+      method: 'GET',
+      path: '/v1/account',
+      query: const {},
+      pathParams: const {},
+      headers: {if (token != null) 'authorization': 'Bearer $token'},
+    );
+
+    Future<String> issue() async {
+      final response = server.routes.single.handler(
+        const FakeRequest(
+          method: 'POST',
+          path: '/v1/auth/login',
+          query: {},
+          pathParams: {},
+          headers: {},
+          body: {'cpf': '00000000191', 'password': 'monte123'},
+        ),
+      );
+      return (response.body! as Map)['access_token'] as String;
+    }
+
+    test('a token it issued is accepted until it expires', () async {
+      final token = await issue();
+      expect(server.accepts(withToken(token)), isTrue);
+      clock.advance(FakeAuthServer.sessionDuration);
+      expect(server.accepts(withToken(token)), isFalse);
+    });
+
+    test('no token, or one it never issued, is refused', () {
+      expect(server.accepts(withToken(null)), isFalse);
+      expect(server.accepts(withToken('demo_123')), isFalse);
+      expect(server.accepts(withToken('monte_99999999999_xyz')), isFalse);
+    });
+
+    test('the "session expired" scenario refuses every token', () async {
+      final token = await issue();
+      settings.scenario = FakeScenario.sessionExpired;
+      expect(server.accepts(withToken(token)), isFalse);
+    });
   });
 
   group('server input validation', () {

@@ -18,14 +18,26 @@ import '../cpf_input_formatter.dart';
 import 'biometric_offer_sheet.dart';
 import 'login_cubit.dart';
 
-class LoginPage extends StatelessWidget {
-  const LoginPage({super.key, this.lastCpf});
+/// What the login receives when the app sends someone to it.
+final class LoginArgs {
+  const LoginArgs({this.lastCpf, this.sessionExpired = false});
 
+  /// Prefills the CPF field.
   final Cpf? lastCpf;
+
+  /// The bank rejected the session: the screen says so.
+  final bool sessionExpired;
+}
+
+class LoginPage extends StatelessWidget {
+  const LoginPage({super.key, this.args});
+
+  final LoginArgs? args;
 
   @override
   Widget build(BuildContext context) => BlocProvider(
-    create: (_) => Modular.get<LoginCubit>()..prefill(lastCpf),
+    create: (_) => Modular.get<LoginCubit>()
+      ..prefill(args?.lastCpf, sessionExpired: args?.sessionExpired ?? false),
     child: LoginView(
       onOpenDevTools: devToolsEnabled
           ? (context) =>
