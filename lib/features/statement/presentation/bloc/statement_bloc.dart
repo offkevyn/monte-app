@@ -3,6 +3,8 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:stream_transform/stream_transform.dart';
 
+import '../../../../core/async/cancel_signal.dart';
+
 import '../../../../core/failures/failure.dart';
 import '../../../../core/freshness/data_freshness.dart';
 import '../../../../core/result/result.dart';
@@ -45,6 +47,13 @@ final class StatementNextPageRequested extends StatementEvent {
   const StatementNextPageRequested();
 }
 
+/// The tab is on screen again (picked in the bar, or the app came back):
+/// looks for news on the unfiltered list. The repository skips the network
+/// when it fetched seconds ago.
+final class StatementVisited extends StatementEvent {
+  const StatementVisited();
+}
+
 /// Pull to refresh.
 final class StatementRefreshed extends StatementEvent {
   const StatementRefreshed();
@@ -75,6 +84,7 @@ final class StatementState extends Equatable {
     this.failure,
     this.pageFailure,
     this.freshness,
+    this.fromDevice = false,
     this.groups = const [],
   }) : items = List.unmodifiable(items),
        filter = filter ?? TransactionFilter.none;
@@ -102,6 +112,10 @@ final class StatementState extends Equatable {
   final Failure? pageFailure;
   final DataFreshness? freshness;
 
+  /// The server could not be reached and the list comes from what is saved
+  /// on the device, which may miss transactions.
+  final bool fromDevice;
+
   bool get hasMore => nextCursor != null;
 
   bool get isEmpty => status == StatementStatus.ready && items.isEmpty;
@@ -117,6 +131,7 @@ final class StatementState extends Equatable {
     Failure? Function()? failure,
     Failure? Function()? pageFailure,
     DataFreshness? freshness,
+    bool? fromDevice,
   }) => StatementState(
     status: status ?? this.status,
     items: items ?? this.items,
@@ -128,6 +143,7 @@ final class StatementState extends Equatable {
     failure: failure != null ? failure() : this.failure,
     pageFailure: pageFailure != null ? pageFailure() : this.pageFailure,
     freshness: freshness ?? this.freshness,
+    fromDevice: fromDevice ?? this.fromDevice,
   );
 
   @override
@@ -141,6 +157,7 @@ final class StatementState extends Equatable {
     failure,
     pageFailure,
     freshness,
+    fromDevice,
   ];
 }
 
@@ -152,7 +169,6 @@ final class StatementState extends Equatable {
 class StatementBloc extends Bloc<StatementEvent, StatementState> {
   StatementBloc(
     this._getPage,
-    this._refresh,
     this._calendar, {
     this.debounce = const Duration(milliseconds: 350),
     this.pageSize = TransactionQuery.defaultLimit,
@@ -165,14 +181,21 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     on<StatementFilterChanged>(
       (event, _) => _reload(event.filter.copyWith(query: state.filter.query)),
     );
+    on<StatementVisited>((_, _) {
+      if (state.status == StatementStatus.ready && state.filter.isEmpty) {
+        _reload(state.filter);
+      }
+    });
     on<StatementRefreshed>((_, _) => _reload(state.filter, forceRefresh: true));
     on<_FirstPageRequested>(_onFirstPage, transformer: restartable());
     on<StatementNextPageRequested>(_onNextPage, transformer: droppable());
   }
 
   final GetStatementPage _getPage;
-  final RefreshLedger _refresh;
   final LocalCalendar _calendar;
+
+  /// Cancels the first-page request a newer search or filter replaced.
+  CancelSignal? _firstPageCancel;
   final Duration debounce;
   final int pageSize;
 
@@ -198,7 +221,18 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
     _FirstPageRequested event,
     Emitter<StatementState> emit,
   ) async {
-    final hasList = state.status == StatementStatus.ready;
+    _firstPageCancel?.cancel();
+    final cancel = _firstPageCancel = CancelSignal();
+
+    var hasList = state.status == StatementStatus.ready;
+    if (!hasList) {
+      // Show what is saved right away; the server answer replaces it.
+      final saved = await _getPage.saved(event.filter);
+      if (saved case Ok(value: final page?) when page.items.isNotEmpty) {
+        hasList = true;
+        emit(_withPage(state, page, filter: event.filter));
+      }
+    }
     emit(
       state.copyWith(
         filter: event.filter,
@@ -207,29 +241,17 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
         pageFailure: () => null,
       ),
     );
-    if (event.forceRefresh) {
-      // A failed sync is fine here: the repository keeps serving the local
-      // copy (marked stale), and the page below reports it.
-      await _refresh();
-    }
+
     final result = await _getPage(
       TransactionQuery(filter: event.filter, limit: pageSize),
+      force: event.forceRefresh,
+      cancel: cancel,
     );
     // `restartable` cancels this handler when a newer request arrives; any
     // emit after that point is ignored, so stale results never show.
     switch (result) {
       case Ok(value: final page):
-        emit(
-          state.copyWith(
-            status: StatementStatus.ready,
-            items: page.items,
-            groups: DayGrouping.group(page.items, _calendar),
-            nextCursor: () => page.nextCursor,
-            freshness: page.freshness,
-            reloading: false,
-            failure: () => null,
-          ),
-        );
+        emit(_merge(page, event.filter).copyWith(reloading: false));
       case Err(failure: CancelledFailure()):
         emit(state.copyWith(reloading: false));
       case Err(:final failure):
@@ -241,6 +263,51 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
           ),
         );
     }
+  }
+
+  /// A fresh first page on top of the list already on screen. When its last
+  /// item is in the list, the pages below are kept (the person may have
+  /// scrolled down); otherwise too much changed and the list starts over.
+  StatementState _merge(TransactionPage page, TransactionFilter filter) {
+    final current = state.items;
+    final sameList = state.filter == filter && !state.fromDevice;
+    if (sameList && page.items.isNotEmpty && page.nextCursor != null) {
+      final lastId = page.items.last.id;
+      final at = current.indexWhere((t) => t.id == lastId);
+      if (at != -1 && at < current.length - 1) {
+        final items = [...page.items, ...current.skip(at + 1)];
+        return state.copyWith(
+          status: StatementStatus.ready,
+          items: items,
+          groups: DayGrouping.group(items, _calendar),
+          freshness: page.freshness,
+          fromDevice: page.fromDevice,
+          failure: () => null,
+        );
+      }
+    }
+    return _withPage(state, page, filter: filter);
+  }
+
+  StatementState _withPage(
+    StatementState from,
+    TransactionPage page, {
+    required TransactionFilter filter,
+  }) => from.copyWith(
+    status: StatementStatus.ready,
+    filter: filter,
+    items: page.items,
+    groups: DayGrouping.group(page.items, _calendar),
+    nextCursor: () => page.nextCursor,
+    freshness: page.freshness,
+    fromDevice: page.fromDevice,
+    failure: () => null,
+  );
+
+  @override
+  Future<void> close() {
+    _firstPageCancel?.cancel();
+    return super.close();
   }
 
   Future<void> _onNextPage(
@@ -270,6 +337,7 @@ class StatementBloc extends Bloc<StatementEvent, StatementState> {
             groups: DayGrouping.group(items, _calendar),
             nextCursor: () => page.nextCursor,
             freshness: page.freshness,
+            fromDevice: state.fromDevice || page.fromDevice,
             loadingMore: false,
           ),
         );

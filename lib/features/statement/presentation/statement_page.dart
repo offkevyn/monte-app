@@ -11,6 +11,7 @@ import '../../../core/money/money_formatter.dart';
 import '../../../core/theme/monte_theme.dart';
 import '../../../core/time/date_labels.dart';
 import '../../../core/ui/failure_message.dart';
+import '../../../core/ui/on_visit.dart';
 import '../../../core/ui/skeleton.dart';
 import '../../../core/ui/stale_banner.dart';
 import '../../../core/ui/under_construction.dart';
@@ -29,7 +30,10 @@ typedef OpenFilters = Future<TransactionFilter?> Function(
 );
 
 class StatementPage extends StatelessWidget {
-  const StatementPage({super.key});
+  const StatementPage({super.key, this.visits});
+
+  /// Fires when this tab is on screen again (see `OnVisit`).
+  final Stream<void>? visits;
 
   /// Hero prefix shared with the detail screen.
   static const heroPrefix = 'statement';
@@ -40,15 +44,21 @@ class StatementPage extends StatelessWidget {
     return BlocProvider(
       create: (_) =>
           Modular.get<StatementBloc>()..add(const StatementStarted()),
-      child: StatementView(
-        money: Modular.get<MoneyFormatter>(),
-        dates: dates,
-        onOpenDetail: (id) => Modular.to.pushNamed(Routes.statementDetail(id)),
-        openFilters: (context, current) => showFilterSheet(
-          context,
-          current: current,
-          count: Modular.get<CountTransactions>(),
+      child: OnVisit(
+        visits: visits,
+        onVisit: (context) =>
+            context.read<StatementBloc>().add(const StatementVisited()),
+        child: StatementView(
+          money: Modular.get<MoneyFormatter>(),
           dates: dates,
+          onOpenDetail: (id) =>
+              Modular.to.pushNamed(Routes.statementDetail(id)),
+          openFilters: (context, current) => showFilterSheet(
+            context,
+            current: current,
+            count: Modular.get<CountTransactions>(),
+            dates: dates,
+          ),
         ),
       ),
     );
@@ -318,6 +328,7 @@ class _StatementViewState extends State<StatementView> {
                       child: StaleBanner(
                         freshness: freshness,
                         dates: widget.dates,
+                        deviceOnly: state.fromDevice && !state.filter.isEmpty,
                       ),
                     ),
                   ),

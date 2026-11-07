@@ -54,7 +54,6 @@ void main() {
       opened = [];
       final bloc = StatementBloc(
         GetStatementPage(repository),
-        RefreshLedger(repository),
         calendar,
         debounce: const Duration(milliseconds: 50),
       )..add(const StatementStarted());
@@ -179,7 +178,9 @@ void main() {
       await pump(tester);
       expect(find.text('Tentar de novo'), findsOneWidget);
 
-      repository.failWith = null;
+      repository
+        ..failWith = null
+        ..nothingSaved = false;
       await tester.tap(find.text('Tentar de novo'));
       await tester.pumpAndSettle();
       expect(find.text('Mercado 0'), findsOneWidget);
@@ -359,11 +360,22 @@ void main() {
       expect(find.text('Voltar'), findsOneWidget);
     });
 
-    testWidgets('other failures can retry', (tester) async {
+    testWidgets('offline, what was saved still shows', (tester) async {
       repository.failWith = const NoConnectionFailure();
       await pump(tester, pix.id);
+      expect(find.text('Ana Souza'), findsOneWidget);
+      expect(find.text('Tentar de novo'), findsNothing);
+    });
+
+    testWidgets('other failures can retry', (tester) async {
+      repository
+        ..failWith = const NoConnectionFailure()
+        ..nothingSaved = true;
+      await pump(tester, pix.id);
       expect(find.text('Tentar de novo'), findsOneWidget);
-      repository.failWith = null;
+      repository
+        ..failWith = null
+        ..nothingSaved = false;
       await tester.tap(find.text('Tentar de novo'));
       await tester.pumpAndSettle();
       expect(find.text('Ana Souza'), findsOneWidget);
