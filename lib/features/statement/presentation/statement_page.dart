@@ -570,8 +570,9 @@ class _Message extends StatelessWidget {
   final VoidCallback? onAction;
 
   @override
+  // Scrolls when the room is short (small phone with the keyboard open).
   Widget build(BuildContext context) => Center(
-    child: Padding(
+    child: SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
