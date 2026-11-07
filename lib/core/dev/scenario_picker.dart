@@ -14,6 +14,7 @@ extension FakeScenarioLabel on FakeScenario {
     FakeScenario.offline => 'Sem internet',
     FakeScenario.corruptedData => 'Dado quebrado',
     FakeScenario.wrongPassword => 'Senha errada',
+    FakeScenario.sessionExpired => 'Sessão expirada',
   };
 }
 

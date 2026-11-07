@@ -6,6 +6,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monte/app/app_module.dart';
 import 'package:monte/app/app_widget.dart';
+import 'package:monte/core/network/fake/fake_scenario.dart';
+import 'package:monte/features/auth/domain/repositories/auth_repository.dart';
+import 'package:monte/features/ledger/domain/entities/transaction_filter.dart';
+import 'package:monte/features/ledger/domain/repositories/ledger_repository.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -106,6 +110,45 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('profile.confirmSignOut')));
       await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
+    },
+  );
+
+  testWidgets(
+    'the bank rejecting the session signs out everywhere and says why',
+    (tester) async {
+      await tester.pumpWidget(
+        ModularApp(module: AppModule(), child: const AppWidget()),
+      );
+      await pumpUntilFound(tester, find.text('Entre com seu CPF e senha.'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('login.demo')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('login.submit')));
+      await pumpUntilFound(tester, find.byKey(const Key('dashboard.balance')));
+
+      await tester.tap(find.text('Extrato').last);
+      await pumpUntilFound(tester, find.textContaining(' · '));
+
+      // The session dies on the server; opening a detail asks the bank.
+      Modular.get<FakeBackendSettings>().scenario = FakeScenario.sessionExpired;
+      await tester.tap(find.byType(InkWell).at(3));
+
+      await pumpUntilFound(
+        tester,
+        find.text('Sua sessão expirou. Entre de novo.'),
+      );
+      expect(find.text('000.000.001-91'), findsOneWidget, reason: 'CPF kept');
+
+      final (session, saved) = (await tester.runAsync(
+        () async => (
+          await Modular.get<AuthRepository>().storedSession(),
+          await Modular.get<LedgerRepository>().savedFirstPage(
+            TransactionFilter.none,
+          ),
+        ),
+      ))!;
+      expect(session, isNull);
+      expect(saved.valueOrNull, isNull, reason: 'the saved statement is gone');
     },
   );
 }

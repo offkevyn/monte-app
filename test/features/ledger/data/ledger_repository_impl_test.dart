@@ -34,6 +34,9 @@ void main() {
   late _CountingRemote remote;
   late LedgerRepositoryImpl repository;
 
+  /// What the fake bank thinks of the session token.
+  var sessionValid = true;
+
   // 05/11/2026 23:30 in Brasília.
   final now = DateTime.utc(2026, 11, 6, 2, 30);
   final thisMonth = DateSpan(LocalDate(2026, 11, 1), LocalDate(2026, 11, 5));
@@ -45,7 +48,12 @@ void main() {
   setUp(() {
     clock = FixedClock(now);
     settings = FakeBackendSettings();
-    server = FakeLedgerServer(settings: settings, clock: clock);
+    sessionValid = true;
+    server = FakeLedgerServer(
+      settings: settings,
+      clock: clock,
+      authorize: (_) => sessionValid,
+    );
     adapter = FakeHttpAdapter(
       settings: settings,
       routes: server.routes,
@@ -408,6 +416,26 @@ void main() {
     )).valueOrNull!;
     expect(snapshot.settledBalance, before + const Money.cents(5000));
   });
+
+  test(
+    'the bank refusing the session: 401 on every endpoint, no fallback',
+    () async {
+      await repository.refreshDashboard(thisMonth);
+      sessionValid = false;
+
+      final dashboard = await repository.refreshDashboard(
+        thisMonth,
+        force: true,
+      );
+      final page = await repository.getPage(TransactionQuery(), force: true);
+      final detail = await repository.refreshTransaction(
+        server.data.transactions.first.id,
+      );
+      for (final result in [dashboard, page, detail]) {
+        expect(result.failureOrNull, const UnauthorizedFailure());
+      }
+    },
+  );
 
   test('expiring recent fetches makes the next refresh ask again', () async {
     await repository.refreshDashboard(thisMonth);

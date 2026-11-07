@@ -29,6 +29,26 @@ final class FakeAuthServer {
 
   List<FakeRoute> get routes => [FakeRoute('POST', '/v1/auth/login', _login)];
 
+  /// Whether [request] carries a token this bank issued and that is still
+  /// valid. The token holds its own expiry (like a signed JWT would), so it
+  /// keeps working after the app restarts with the saved session.
+  bool accepts(FakeRequest request) {
+    if (settings.scenario == FakeScenario.sessionExpired) return false;
+    final header = request.headers.entries
+        .where((h) => h.key.toLowerCase() == 'authorization')
+        .map((h) => h.value)
+        .firstOrNull;
+    final match = _bearer.firstMatch(header is String ? header : '');
+    if (match == null) return false;
+    final expires = DateTime.fromMillisecondsSinceEpoch(
+      int.parse(match.group(1)!) * 1000,
+      isUtc: true,
+    );
+    return _clock.nowUtc().isBefore(expires);
+  }
+
+  static final _bearer = RegExp(r'^Bearer monte_(\d{1,12})_[0-9a-f]{32}$');
+
   FakeResponse _login(FakeRequest request) {
     final body = request.body;
     if (body is! Map ||
@@ -78,5 +98,9 @@ final class FakeAuthServer {
     'retry_after_seconds': wait.inSeconds,
   });
 
-  String _token() => 'demo_${randomHex(_random, 16)}';
+  String _token() {
+    final expires = _clock.nowUtc().add(sessionDuration);
+    final seconds = expires.millisecondsSinceEpoch ~/ 1000;
+    return 'monte_${seconds}_${randomHex(_random, 16)}';
+  }
 }

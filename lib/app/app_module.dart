@@ -3,11 +3,14 @@ import 'package:flutter_modular/flutter_modular.dart';
 import '../core/core_module.dart';
 import '../core/money/money_formatter.dart';
 import '../core/network/api_client_factory.dart';
+import '../core/network/auth_interceptor.dart';
 import '../core/network/bank_api.dart';
 import '../core/network/fake/fake_http_adapter.dart';
 import '../core/network/fake/fake_scenario.dart';
 import '../core/platform/app_info.dart';
 import '../core/security/biometric_authenticator.dart';
+import '../core/session/session_expiry.dart';
+import '../core/session/user_data.dart';
 import '../core/storage/app_preferences.dart';
 import '../core/storage/encrypted_database.dart';
 import '../core/storage/secure_store.dart';
@@ -15,7 +18,6 @@ import '../core/time/clock.dart';
 import '../core/time/local_calendar.dart';
 import '../features/auth/data/auth_data.dart';
 import '../features/auth/data/fake/fake_auth_server.dart';
-import '../features/auth/domain/entities/cpf.dart';
 import '../features/auth/domain/repositories/auth_repository.dart';
 import '../features/auth/domain/usecases/auth_usecases.dart';
 import '../features/auth/presentation/current_session.dart';
@@ -71,6 +73,7 @@ class AppModule extends Module {
         () => FakeLedgerServer(
           settings: Modular.get<FakeBackendSettings>(),
           clock: Modular.get<Clock>(),
+          authorize: Modular.get<FakeAuthServer>().accepts,
         ),
       )
       ..addSingleton<FakeHttpAdapter>(
@@ -82,16 +85,25 @@ class AppModule extends Module {
           ],
         ),
       )
+      // Every bank request carries the session token; a 401 on one of them
+      // signs the customer out (SessionExpiryHandler, started by AppWidget).
+      ..addSingleton<CurrentSession>(CurrentSession.new)
+      ..addSingleton<SessionExpiry>(SessionExpiry.new)
       ..addSingleton<BankApi>(
         () => BankApi(
           ApiClientFactory.create(
             baseUrl: ApiClientFactory.fakeBankBaseUrl,
             adapter: Modular.get<FakeHttpAdapter>(),
+            interceptors: [
+              AuthInterceptor(
+                token: () => Modular.get<CurrentSession>().value?.accessToken,
+                onRejected: Modular.get<SessionExpiry>().report,
+              ),
+            ],
           ),
         ),
       )
       // Auth
-      ..addSingleton<CurrentSession>(CurrentSession.new)
       ..addLazySingleton<AuthRepository>(
         () => AuthRepositoryImpl(
           AuthRemoteDataSource(Modular.get<BankApi>().dio),
@@ -99,10 +111,18 @@ class AppModule extends Module {
           Modular.get<Clock>(),
         ),
       )
-      ..add<SignIn>(() => SignIn(Modular.get<AuthRepository>()))
-      ..add<SignOut>(() => SignOut(Modular.get<AuthRepository>()))
+      ..add<SignIn>(
+        () => SignIn(Modular.get<AuthRepository>(), userData: _userData()),
+      )
+      ..add<SignOut>(
+        () => SignOut(Modular.get<AuthRepository>(), userData: _userData()),
+      )
       ..add<ResolveStart>(
-        () => ResolveStart(Modular.get<AuthRepository>(), Modular.get<Clock>()),
+        () => ResolveStart(
+          Modular.get<AuthRepository>(),
+          Modular.get<Clock>(),
+          Modular.get<SignOut>(),
+        ),
       )
       ..add<SplashCubit>(
         () => SplashCubit(
@@ -220,12 +240,16 @@ class AppModule extends Module {
           biometrics: Modular.get<BiometricAuthenticator>(),
           appInfo: Modular.get<AppInfo>(),
           signOut: Modular.get<SignOut>(),
-          ledger: Modular.get<LedgerRepository>(),
-          market: Modular.get<MarketRepository>(),
           session: Modular.get<CurrentSession>(),
         ),
       );
   }
+
+  /// Every store of the customer's data, emptied on sign out.
+  static List<UserData> _userData() => [
+    Modular.get<LedgerRepository>(),
+    Modular.get<MarketRepository>(),
+  ];
 
   @override
   void routes(RouteManager r) {
@@ -233,7 +257,13 @@ class AppModule extends Module {
       ..child(Routes.splash, child: (_) => const SplashPage())
       ..child(
         Routes.login,
-        child: (_) => LoginPage(lastCpf: r.args.data as Cpf?),
+        // Anything else (no arguments, a restored route) opens it blank.
+        child: (_) => LoginPage(
+          args: switch (r.args.data) {
+            final LoginArgs args => args,
+            _ => null,
+          },
+        ),
         transition: TransitionType.fadeIn,
       )
       ..child(

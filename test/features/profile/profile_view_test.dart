@@ -59,9 +59,7 @@ void main() {
       preferences: preferences,
       biometrics: biometrics,
       appInfo: const FixedAppInfo(),
-      signOut: SignOut(FakeAuthRepository()),
-      ledger: ledger,
-      market: market,
+      signOut: SignOut(FakeAuthRepository(), userData: [ledger, market]),
       session: CurrentSession(),
     );
   });

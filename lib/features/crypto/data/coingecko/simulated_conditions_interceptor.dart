@@ -57,7 +57,8 @@ class SimulatedConditionsInterceptor extends Interceptor {
       case FakeScenario.normal ||
           FakeScenario.empty ||
           FakeScenario.corruptedData ||
-          FakeScenario.wrongPassword:
+          FakeScenario.wrongPassword ||
+          FakeScenario.sessionExpired:
         break;
     }
     handler.next(options);

@@ -98,8 +98,15 @@ class LoginCubit extends Cubit<LoginState> {
   static const emptyPassword = 'Digite sua senha.';
 
   /// Fills the CPF of the last customer, when the app remembers one.
-  void prefill(Cpf? lastCpf) {
-    if (lastCpf != null) emit(state.copyWith(cpf: lastCpf.formatted));
+  /// [sessionExpired] shows "Sua sessão expirou. Entre de novo." above
+  /// the form until the person types or tries again.
+  void prefill(Cpf? lastCpf, {bool sessionExpired = false}) {
+    emit(
+      state.copyWith(
+        cpf: lastCpf?.formatted,
+        failure: sessionExpired ? () => const UnauthorizedFailure() : null,
+      ),
+    );
   }
 
   /// Demo account shortcut, shown on the login screen.

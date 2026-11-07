@@ -8,6 +8,7 @@ import 'package:flutter_modular/flutter_modular.dart'
 import '../../../../app/routes.dart';
 import '../../../../core/theme/monte_theme.dart';
 import '../../../../core/ui/monte_logo.dart';
+import '../login/login_page.dart';
 import 'splash_cubit.dart';
 
 /// The ridge draws itself, the coin drops into the sky, then the name and
@@ -77,7 +78,10 @@ class _SplashViewState extends State<_SplashView>
       case SplashGoHome():
         Modular.to.navigate(Routes.home);
       case SplashGoToLogin(:final lastCpf):
-        Modular.to.navigate(Routes.login, arguments: lastCpf);
+        Modular.to.navigate(
+          Routes.login,
+          arguments: LoginArgs(lastCpf: lastCpf),
+        );
       case SplashChecking():
         break;
     }

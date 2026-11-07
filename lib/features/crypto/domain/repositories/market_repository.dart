@@ -1,5 +1,6 @@
 import '../../../../core/async/cancel_signal.dart';
 import '../../../../core/result/result.dart';
+import '../../../../core/session/user_data.dart';
 import '../entities/market_data.dart';
 
 /// Crypto market data, read from CoinGecko and kept on the device.
@@ -9,7 +10,7 @@ import '../entities/market_data.dart';
 /// saves the answer. When the API fails (no connection, 429) and something
 /// was saved before, that copy comes back marked as stale instead of an
 /// error.
-abstract interface class MarketRepository {
+abstract interface class MarketRepository implements UserData {
   /// One page of the most traded coins. Pages start at 1.
   Future<Result<MarketList>> getMostTraded({
     required int page,
@@ -48,5 +49,6 @@ abstract interface class MarketRepository {
   Future<Result<bool>> toggleFavorite(String id);
 
   /// Deletes everything saved (on sign out, favorites are personal).
+  @override
   Future<void> clear();
 }
