@@ -326,6 +326,8 @@ flowchart LR
   A -->|cripto| Net["HTTPS<br/>api.coingecko.com"]
 ```
 
+**Ele confere a internet do celular.** Como o banco simulado roda dentro do app, sozinho ele continuaria respondendo com o celular offline. Por isso, antes de responder, ele faz uma consulta rápida de DNS (`DeviceConnection`, reaproveitada por 5 s). Sem internet, ele responde como um servidor fora do alcance, e o app passa a mostrar o que está guardado, com a faixa amarela. Isso existe só pra simulação ficar realista: com um backend de verdade, o próprio pedido falharia, e esse passo não existiria.
+
 No flavor **dev**, um seletor escondido (segurar o dedo no logo do login, ou ir em Perfil → Desenvolvimento) troca o cenário ao vivo. No **prod**, o seletor nem é compilado (ver [16](#16-flavors-e-build-de-release)).
 
 **Ficou de fora:**
@@ -516,7 +518,7 @@ flowchart TB
   I --- W --- U
 ```
 
-- **520 testes** de unidade e de widget, com **93,9%** de cobertura das linhas escritas à mão (os arquivos gerados, `.g.dart`, ficam fora da conta).
+- **525 testes** de unidade e de widget, com **93,9%** de cobertura das linhas escritas à mão (os arquivos gerados, `.g.dart`, ficam fora da conta).
 - **Determinísticos:**
   - o relógio é injetado (`Clock`);
   - o banco simulado tem semente fixa;
@@ -580,9 +582,10 @@ Pela ordem que eu faria:
 3. **Backend pra chave da CoinGecko** (Cloud Function + Secret Manager + App Check).
 4. **Crashlytics** com os símbolos que o CI já guarda, pra ler os erros do APK ofuscado.
 5. **Sincronização incremental** (`updated_since`) no lugar da página 1 inteira.
-6. **Teste de arquitetura no CI.** Um teste que lê os `import` de cada arquivo e falha se o domínio usar dados, Flutter, Dio ou drift. Hoje essa regra é garantida por revisão (e o domínio está limpo); o teste faria o PR ficar vermelho na hora.
-7. **Digital no teste de integração** (`adb emu finger touch` ou Patrol) e **golden tests** das telas principais.
-8. **Com mais pessoas no time:**
+6. **Limitador de pedidos à CoinGecko do nosso lado.** Hoje o app economiza com o cache (gráfico por 5 min, lista por 60 s) e **reage** ao 429 da CoinGecko: espera o tempo que ela pede, ou avisa quando a espera é longa. O próximo passo é **evitar** chegar no bloqueio: segurar os pedidos no app (um número máximo por minuto, com fila). No acesso público o limite é baixo, e trocar de moeda e de período várias vezes já bate nele. A solução completa é o backend do item 3, que pede uma vez e entrega pra todo mundo.
+7. **Teste de arquitetura no CI.** Um teste que lê os `import` de cada arquivo e falha se o domínio usar dados, Flutter, Dio ou drift. Hoje essa regra é garantida por revisão (e o domínio está limpo); o teste faria o PR ficar vermelho na hora.
+8. **Digital no teste de integração** (`adb emu finger touch` ou Patrol) e **golden tests** das telas principais.
+9. **Com mais pessoas no time:**
    - um pacote por funcionalidade;
    - CODEOWNERS;
    - testes de contrato com o backend real.

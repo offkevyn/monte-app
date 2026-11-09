@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/offkevyn/monte-app/actions/workflows/ci.yml/badge.svg)](https://github.com/offkevyn/monte-app/actions/workflows/ci.yml)
 ![Flutter](https://img.shields.io/badge/Flutter-3.47.9-02569B?logo=flutter)
-![Testes](https://img.shields.io/badge/testes-520-0F6B45)
+![Testes](https://img.shields.io/badge/testes-525-0F6B45)
 ![Cobertura](https://img.shields.io/badge/cobertura-93,9%25-0F6B45)
 
 <img src="docs/images/monte.gif" width="300" alt="O app rodando: login, painel, extrato e cripto">
@@ -107,7 +107,8 @@ Tema claro e escuro, que segue o celular ou é escolhido no app.
 - **Detalhe da moeda** com gráfico de 24 h, 7 dias, 30 dias e 1 ano.
 - **Favoritas.**
 - **Preço com 8 casas**, sempre em inteiro, pra moedas baratas não virarem R$ 0,00.
-- **Limite de requisições (429)** respeitado: o app espera e tenta de novo sozinho.
+- **Limite de requisições (429)** respeitado: se a CoinGecko pede uma espera curta, o app espera e tenta de novo sozinho; se a espera é longa, ele avisa quanto falta.
+- **Logos e preços guardados no aparelho**, pra aparecerem sem internet.
 
 <br clear="right">
 
@@ -208,7 +209,7 @@ flutter run --flavor prod --dart-define-from-file=config/local.json
 ### Testes
 
 ```bash
-flutter test                                 # unidade e widget (520)
+flutter test                                 # unidade e widget (525)
 flutter test --coverage                      # + coverage/lcov.info
 dart run tool/check_coverage.dart 70         # confere o mínimo de 70%
 flutter test integration_test                # integração (emulador aberto)
@@ -238,7 +239,7 @@ O APK sai em `build/app/outputs/flutter-apk/app-prod-release.apk`. Os símbolos 
 
 | | |
 |---|---|
-| **Testes** | 520 de unidade e widget + 2 fluxos de integração no emulador |
+| **Testes** | 525 de unidade e widget + 2 fluxos de integração no emulador |
 | **Cobertura** | 93,9% das linhas escritas à mão (o CI falha abaixo de 70%) |
 | **Lint** | `flutter_lints` + regras extras e modo estrito do analisador (`strict-casts`, `strict-inference`, `strict-raw-types`), sem aviso pendente |
 | **CI** | formatação, análise, testes em 2 fusos, cobertura, integração no emulador e APK ofuscado ([detalhes](docs/decisoes.md#17-testes-e-ci)) |
