@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/failures/failure.dart';
@@ -36,17 +37,18 @@ class CoinAvatar extends StatelessWidget {
     final url = coin.imageUrl;
     if (url == null) return fallback;
     return ClipOval(
-      child: Image.network(
-        url,
+      // Saved on the phone (cached_network_image), so the logos are still
+      // there offline, next to the saved prices.
+      child: CachedNetworkImage(
+        imageUrl: url,
         width: size,
         height: size,
         fit: BoxFit.cover,
-        excludeFromSemantics: true,
-        errorBuilder: (_, _, _) => fallback,
-        // The letter stays until the first frame of the image is decoded,
-        // so the circle is never empty while it downloads.
-        frameBuilder: (_, child, frame, synchronous) =>
-            frame == null && !synchronous ? fallback : child,
+        // The letter stays while the image downloads or when it fails, so
+        // the circle is never empty.
+        placeholder: (_, _) => fallback,
+        errorWidget: (_, _, _) => fallback,
+        fadeInDuration: Duration.zero,
       ),
     );
   }
