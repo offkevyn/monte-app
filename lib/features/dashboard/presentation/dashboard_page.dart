@@ -117,7 +117,11 @@ class DashboardView extends StatelessWidget {
                               onToggle: cubit.toggleBalance,
                             ),
                             DashboardStatus.loading => const _CardSkeleton(),
-                            DashboardStatus.failure => const SizedBox.shrink(),
+                            // Keeps the green top behind the greeting: the
+                            // background stops where the card would overlap.
+                            DashboardStatus.failure => const SizedBox(
+                              height: 96,
+                            ),
                           },
                         ),
                       ),

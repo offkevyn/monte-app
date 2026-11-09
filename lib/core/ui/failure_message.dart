@@ -5,8 +5,9 @@ import '../failures/failure.dart';
 /// The `switch` has no `default`: when a new failure is added to the sealed
 /// hierarchy, this file stops compiling until it gets a message.
 String failureMessage(Failure failure) => switch (failure) {
-  NoConnectionFailure() =>
-    'Sem internet. Mostrando o que já estava salvo no aparelho.',
+  // Only shown when there is nothing saved to show: with saved data, the
+  // stale banner speaks instead.
+  NoConnectionFailure() => 'Sem internet. Confira sua conexão e tente de novo.',
   TimeoutFailure() => 'O servidor demorou para responder. Tente de novo.',
   ServerFailure() =>
     'Algo deu errado do nosso lado. Tente de novo em instantes.',

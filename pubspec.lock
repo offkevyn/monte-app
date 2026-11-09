@@ -121,6 +121,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "8.13.0"
+  cached_network_image:
+    dependency: "direct main"
+    description:
+      name: cached_network_image
+      sha256: f865286d78afe21964f8a22f7e7e798ab6b0cceb6608effe4e31983776f4736f
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.0.6"
+  cached_network_image_platform_interface:
+    dependency: transitive
+    description:
+      name: cached_network_image_platform_interface
+      sha256: "555e287d3882fbb36cde50d24214cb3f6a272d39c4386e8afe00cb188d35b285"
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.0.3"
+  cached_network_image_web:
+    dependency: transitive
+    description:
+      name: cached_network_image_web
+      sha256: "99ba26ba4de2fd5524b84a8c6f14931aaeb25d740a954e92d8249e7be6cd9e31"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.4"
   characters:
     dependency: transitive
     description:
@@ -201,6 +225,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
+  cupertino_ui:
+    dependency: transitive
+    description:
+      name: cupertino_ui
+      sha256: "369e39a1c5c030a6212589c3da1809920b1c2cfade7b02aade7695bfa4b88c3a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.6"
   dart_style:
     dependency: transitive
     description:
@@ -310,6 +342,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.1.1"
+  flutter_cache_manager:
+    dependency: transitive
+    description:
+      name: flutter_cache_manager
+      sha256: a42024cf8bbb7e1f4d2875301660f62543601a4c3b20119ea9a683e4d191d0f4
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.5.0"
   flutter_driver:
     dependency: transitive
     description: flutter
@@ -612,6 +652,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.0"
+  material_ui:
+    dependency: transitive
+    description:
+      name: material_ui
+      sha256: a30f5d0625b6b83770f53ca3f7aafd6fd9d147cb3853f54a70668541046fe5d6
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.10.0"
   meta:
     dependency: "direct main"
     description:
@@ -668,6 +716,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "9.6.2"
+  octo_image:
+    dependency: transitive
+    description:
+      name: octo_image
+      sha256: "9c9e56f655c301fd2e6c26390461b4fbd23be861b29607c5e2e4d16e8231ce50"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.4"
   package_config:
     dependency: transitive
     description:
@@ -836,6 +892,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  rxdart:
+    dependency: transitive
+    description:
+      name: rxdart
+      sha256: "5c3004a4a8dbb94bd4bf5412a4def4acdaa12e12f269737a5751369e12d1a962"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.28.0"
   shared_preferences:
     dependency: "direct main"
     description:
@@ -929,6 +993,46 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.2"
+  sqflite:
+    dependency: transitive
+    description:
+      name: sqflite
+      sha256: "0b341459cb009e219e1d0b2d765622337ce5c4fc86ea6ff6cf523d91a68ece68"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.5+1"
+  sqflite_android:
+    dependency: transitive
+    description:
+      name: sqflite_android
+      sha256: e75917dbfe721e6938fc4ff18d3e61549f17cf88a4eba189e2b270290d0c9be3
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.6"
+  sqflite_common:
+    dependency: transitive
+    description:
+      name: sqflite_common
+      sha256: "9df8c7d151dd93aed9239a7e52309944b2af36936d83bec0a84d280f66d915a9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.5.16"
+  sqflite_darwin:
+    dependency: transitive
+    description:
+      name: sqflite_darwin
+      sha256: "6ef57df819b502e306d0b58ba6cb614952d294b825c003feba3c47764c20a825"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.6"
+  sqflite_platform_interface:
+    dependency: transitive
+    description:
+      name: sqflite_platform_interface
+      sha256: "7bfeb7f9e09761147e8e3a4ff3f1d8979fe46a736f03f3805f572599ade69308"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.4.4"
   sqlcipher_flutter_libs:
     dependency: transitive
     description:
@@ -1017,6 +1121,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "35.1.43"
+  synchronized:
+    dependency: transitive
+    description:
+      name: synchronized
+      sha256: a77637ebe1460f3b48cac89a790d2eb634f0a8593cab0d3f340c6db174ba9b94
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.6.1+1"
   term_glyph:
     dependency: transitive
     description:

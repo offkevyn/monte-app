@@ -25,6 +25,15 @@ void main() {
     }
   });
 
+  test('no connection does not promise saved data', () {
+    // The message shows on error screens, which only appear when nothing
+    // is saved; the stale banner covers the case with saved data.
+    expect(
+      failureMessage(const NoConnectionFailure()),
+      isNot(contains('salvo')),
+    );
+  });
+
   test('rate limit tells how long to wait when the server says so', () {
     expect(
       failureMessage(
