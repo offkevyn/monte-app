@@ -375,6 +375,22 @@ void main() {
       expect(cubit.state.status, DashboardStatus.ready);
     });
 
+    testWidgets('error screen keeps the greeting on the green top', (
+      tester,
+    ) async {
+      repository.dashboardFor = (_) => const Err(NoConnectionFailure());
+      await pump(tester);
+      final green = tester.getRect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is CustomPaint &&
+              w.painter.runtimeType.toString() == '_MountainsPainter',
+        ),
+      );
+      final name = tester.getRect(find.text('Kevyn'));
+      expect(green.top <= name.top && name.bottom <= green.bottom, isTrue);
+    });
+
     testWidgets('empty account explains instead of showing a blank list', (
       tester,
     ) async {
