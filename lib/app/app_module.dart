@@ -5,6 +5,7 @@ import '../core/money/money_formatter.dart';
 import '../core/network/api_client_factory.dart';
 import '../core/network/auth_interceptor.dart';
 import '../core/network/bank_api.dart';
+import '../core/network/fake/device_connection.dart';
 import '../core/network/fake/fake_http_adapter.dart';
 import '../core/network/fake/fake_scenario.dart';
 import '../core/platform/app_info.dart';
@@ -76,9 +77,11 @@ class AppModule extends Module {
           authorize: Modular.get<FakeAuthServer>().accepts,
         ),
       )
+      ..addSingleton<DeviceConnection>(DeviceConnection.new)
       ..addSingleton<FakeHttpAdapter>(
         () => FakeHttpAdapter(
           settings: Modular.get<FakeBackendSettings>(),
+          isDeviceOnline: Modular.get<DeviceConnection>().isOnline,
           routes: [
             ...Modular.get<FakeAuthServer>().routes,
             ...Modular.get<FakeLedgerServer>().routes,

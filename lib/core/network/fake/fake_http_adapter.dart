@@ -78,6 +78,7 @@ class FakeHttpAdapter implements HttpClientAdapter {
     required List<FakeRoute> routes,
     Random? random,
     Sleep? sleep,
+    this._isDeviceOnline,
   }) : _routes = List.of(routes),
        _random = random ?? Random(7),
        _sleep = sleep ?? Future<void>.delayed;
@@ -86,6 +87,10 @@ class FakeHttpAdapter implements HttpClientAdapter {
   final List<FakeRoute> _routes;
   final Random _random;
   final Sleep _sleep;
+
+  /// Real connectivity of the phone (see `DeviceConnection`). Without it,
+  /// as in unit tests, only the offline scenario takes the network away.
+  final Future<bool> Function()? _isDeviceOnline;
 
   /// 429 answers already given per path in the rate limited scenario.
   final _rateLimitHits = <String, int>{};
@@ -104,10 +109,13 @@ class FakeHttpAdapter implements HttpClientAdapter {
     final scenario = settings.scenario;
     await _sleep(_latency(scenario));
 
-    if (scenario == FakeScenario.offline) {
+    final deviceOffline = _isDeviceOnline != null && !await _isDeviceOnline();
+    if (scenario == FakeScenario.offline || deviceOffline) {
       throw DioException.connectionError(
         requestOptions: options,
-        reason: 'Simulated offline',
+        reason: deviceOffline
+            ? 'No internet on the device'
+            : 'Simulated offline',
         error: const SocketException('Simulated offline'),
       );
     }

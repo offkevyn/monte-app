@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monte/app/app_module.dart';
 import 'package:monte/app/app_widget.dart';
 import 'package:monte/core/network/api_client_factory.dart';
+import 'package:monte/core/network/fake/device_connection.dart';
 import 'package:monte/core/network/fake/fake_scenario.dart';
 import 'package:monte/core/security/biometric_authenticator.dart';
 import 'package:monte/core/storage/encrypted_database.dart';
@@ -57,6 +60,10 @@ Future<FakeBackendSettings> startApp(
   );
   Modular
     ..replaceInstance<BiometricAuthenticator>(const NoBiometrics())
+    // The simulated bank checks the phone's connection; tests decide it.
+    ..replaceInstance<DeviceConnection>(
+      DeviceConnection(lookup: (_) async => [InternetAddress.loopbackIPv4]),
+    )
     ..replaceInstance<MarketRepository>(
       MarketRepositoryImpl(
         remote: CoinGeckoRemoteDataSource(
